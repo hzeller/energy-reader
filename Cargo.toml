@@ -1,0 +1,13 @@
+[package]
+name = "energy-reader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# For image processing
+#opencv = { version = "0.92", features = ["clang-runtime"] }
+
+# For OCR (Leptess is a popular C wrapper for Tesseract)
+#leptess = "0.14"
+image = "0.25"
+edge-detection = "0.3"
