@@ -16,23 +16,6 @@ fn load_as_grayscale(path : &str) -> GrayImage {
 // Intemediate image has a high-resolution
 type ProcessedImage = ImageBuffer::<Luma<f32>, Vec<f32>>;
 
-fn normalize(img : &ProcessedImage) -> GrayImage {
-    let mut result = GrayImage::new(img.width(), img.height());
-    let min = img.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-    let range = img.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)) - min;
-    println!("min:{}, range:{}", min, range);
-    // TODO: Do some sort of map()
-    for ix in 0..img.width() {
-	for iy in 0..img.height() {
-	    let p = img.get_pixel(ix, iy)[0];
-	    let zero_to_one = (p - min) / range;
-	    let normalized = [(255.0 * zero_to_one) as u8; 1];
-	    result.put_pixel(ix, iy, Luma::<u8>::from(normalized));
-	}
-    }
-    result
-}
-
 fn highest_column_value(img : &ProcessedImage) -> Vec<f32> {
     let mut result = Vec::new();
     let min = img.iter().fold(f32::INFINITY, |a, &b| a.min(b));
@@ -78,10 +61,10 @@ fn cross_correlate(haystack: &GrayImage, needle: &GrayImage) -> ProcessedImage {
     for hx in 0..haystack.width() - needle.width() {
 	for hy in 0..haystack.height() - needle.height() {
 	    let mut value : [f32; 1] = [0.0; 1];
-	    for x in 0..needle.width() {
-		for y in 0..needle.height() {
-		    value[0] += needle.get_pixel(x, y)[0] as f32 *
-			haystack.get_pixel(hx+x, hy+y)[0] as f32;
+	    for nx in 0..needle.width() {
+		for ny in 0..needle.height() {
+		    value[0] += needle.get_pixel(nx, ny)[0] as f32 *
+			haystack.get_pixel(hx+nx, hy+ny)[0] as f32;
 		}
 	    }
 	    value[0] /= pixel_sum as f32;
@@ -156,7 +139,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	digit_scores.push(highest_column);
 	let visualize = graph(&digit_scores[digit_scores.len()-1],
 			      haystack.height());
-	//let visualize = normalize(&xcorr);
 
 	image::imageops::overlay(&mut output, digit, 0,
 				 vertical_pos as i64);
@@ -166,12 +148,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	vertical_pos += haystack.height();
     }
 
-
     let mut descision_cutoff = u32::MAX;
     let mut descision_score = 0.0;
     let mut descision_index = -1;
 
     for x in 0..haystack.width() {
+	// What is the highest scoring digit
 	let mut found_index = -1;
 	for i in 0..digit_scores.len() {
 	    let feature_score = &digit_scores[i];
