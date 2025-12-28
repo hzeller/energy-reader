@@ -1,41 +1,21 @@
 #![allow(dead_code)]
 #![allow(unreachable_code)]
 
-use image::{DynamicImage,GrayImage,ImageBuffer,Luma};
+use image::{DynamicImage,GrayImage,Luma};
 use std::env;
 use std::cmp;
 
-//const THRESHOLD:f32 = 0.75;
-const THRESHOLD:f32 = 0.8;   // ok with sobel
+const THRESHOLD:f32 = 0.6;
+//const THRESHOLD:f32 = 0.4;  // w/o sobel
 
 fn load_as_grayscale(path : &str) -> GrayImage {
     let rgba = image::open(path).unwrap().into_rgba8();
     DynamicImage::ImageRgba8(rgba).into_luma8()
 }
 
-// Intemediate image has a high-resolution
-type ProcessedImage = ImageBuffer::<Luma<f32>, Vec<f32>>;
+type ColumnFeatureScore = Vec<f32>;
 
-fn highest_column_value(img : &ProcessedImage) -> Vec<f32> {
-    let mut result = Vec::new();
-    let min = img.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-    let max = img.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)) - min;
-    let range = max - min;
-    println!("{}..{} (range: {})", min, max, range);
-    // TODO: Do some sort of map()
-    for ix in 0..img.width() {
-	let mut highest_column_value : f32 = 0.0;
-	for iy in 0..img.height() {
-	    let p = img.get_pixel(ix, iy)[0];
-	    let zero_to_one = (p - min) / range;
-	    highest_column_value = highest_column_value.max(zero_to_one);
-	}
-	result.push(highest_column_value);
-    }
-    result
-}
-
-fn graph(values: &Vec<f32>, height: u32) -> GrayImage {
+fn graph(values: &ColumnFeatureScore, height: u32) -> GrayImage {
     let mut result = GrayImage::new(values.len() as u32, height);
     let white = Luma::<u8>::from([255;1]);
 
@@ -53,23 +33,27 @@ fn graph(values: &Vec<f32>, height: u32) -> GrayImage {
     result
 }
 
-fn cross_correlate(haystack: &GrayImage, needle: &GrayImage) -> ProcessedImage {
-    let pixel_sum = needle.iter().fold(0, |sum:u32, &p| { sum + p as u32 });
-    //println!("Pixel sum: {}", pixel_sum);
-    let mut output = ProcessedImage::new(haystack.width(),
-					 haystack.height());
+fn cross_correlate(haystack: &GrayImage, needle: &GrayImage)
+		   -> ColumnFeatureScore {
+    // Prepare to normalize the output.
+    let needle_sum = needle.iter().fold(0, |sum:u32, &p| { sum + p as u32 });
+    let mut output = vec![0.0; haystack.width() as usize];
+
+    // Expensive, but ok for now as we only look at a small image.
     for hx in 0..haystack.width() - needle.width() {
+	let mut column_high_score : f32 = 0.0;
 	for hy in 0..haystack.height() - needle.height() {
-	    let mut value : [f32; 1] = [0.0; 1];
-	    for nx in 0..needle.width() {
-		for ny in 0..needle.height() {
-		    value[0] += needle.get_pixel(nx, ny)[0] as f32 *
+	    let mut value = 0.0;
+	    for ny in 0..needle.height() {
+		for nx in 0..needle.width() {
+		    value += needle.get_pixel(nx, ny)[0] as f32 *
 			haystack.get_pixel(hx+nx, hy+ny)[0] as f32;
 		}
 	    }
-	    value[0] /= pixel_sum as f32;
-	    output.put_pixel(hx, hy, Luma::<f32>::from(value));
+	    value /= needle_sum as f32;
+	    column_high_score = column_high_score.max(value / 255.0);
 	}
+	output[hx as usize] = column_high_score;
     }
     output
 }
@@ -83,18 +67,23 @@ fn sobel(input: &GrayImage) -> GrayImage {
 
     for x in 0..width {
         for y in 0..height {
-            /* Unwrap those loops! */
-            let val0 = input.get_pixel(x, y)[0] as i32;
-            let val1 = input.get_pixel(x + 1 , y)[0] as i32;
-            let val2 = input.get_pixel(x + 2, y)[0] as i32;
-            let val3 = input.get_pixel(x, y + 1)[0] as i32;
-            let val5 = input.get_pixel(x + 2, y + 1)[0] as i32;
-            let val6 = input.get_pixel(x, y + 2)[0] as i32;
-            let val7 = input.get_pixel(x + 1, y + 2)[0] as i32;
-            let val8 = input.get_pixel(x + 2, y + 2)[0] as i32;
-            /* Apply Sobel kernels */
-            let gx = (-1 * val0) + (-2 * val3) + (-1 * val6) + val2 + (2 * val5) + val8;
-            let gy = (-1 * val0) + (-2 * val1) + (-1 * val2) + val6 + (2 * val7) + val8;
+            let nw = input.get_pixel(x, y)[0] as i32;
+            let ne = input.get_pixel(x + 2, y)[0] as i32;
+
+            let north = input.get_pixel(x + 1 , y)[0] as i32;
+            let west = input.get_pixel(x, y + 1)[0] as i32;
+            let east = input.get_pixel(x + 2, y + 1)[0] as i32;
+            let south = input.get_pixel(x + 1, y + 2)[0] as i32;
+
+	    let sw = input.get_pixel(x, y + 2)[0] as i32;
+            let se = input.get_pixel(x + 2, y + 2)[0] as i32;
+
+	    let gx = (-1 *   nw) + (1 *   ne)
+		+    (-2 * west) + (2 * east)
+		+    (-1 *   sw) + (1 *   se);
+	    let gy = (-1 * nw) + (-2 * north) + (-1 * ne)
+                +    ( 1 * sw) + ( 2 * south) + ( 1 * se);
+
             let mut mag = ((gx as f64).powi(2) + (gy as f64).powi(2)).sqrt();
 
             if mag > 255.0 {
@@ -109,6 +98,7 @@ fn sobel(input: &GrayImage) -> GrayImage {
 
 // Params: energy-reader image <digit0> <digit1>...
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // First image is the text containing image, followed by digits.
     let haystack_raw = load_as_grayscale(env::args().nth(1).unwrap().as_str());
     let haystack = sobel(&haystack_raw);
 
@@ -119,9 +109,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	max_digit_width = cmp::max(max_digit_width, digit.width());
 	digits.push(digit);
     }
-
-    // Overlay the found digits.
-    //image::imageops::overlay(&mut haystack, &digits[0], 50, 16);
 
     let mut vertical_pos = 0;
     let mut output = GrayImage::new(max_digit_width + haystack.width(),
@@ -134,8 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // the heatmap/graphs of digit matches
     let mut digit_scores : Vec<Vec<f32>> = Vec::new();
     for digit in digits.iter() {
-	let xcorr = cross_correlate(&haystack, digit);
-	let highest_column = highest_column_value(&xcorr);
+	let highest_column = cross_correlate(&haystack, digit);
 	digit_scores.push(highest_column);
 	let visualize = graph(&digit_scores[digit_scores.len()-1],
 			      haystack.height());
@@ -173,6 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 
 	if x >= descision_cutoff {
+	    println!("Digit {} at {}", descision_index, x);
 	    let digit = &digits[descision_index as usize];
 	    image::imageops::overlay(&mut output, digit,
 				     x as i64,
