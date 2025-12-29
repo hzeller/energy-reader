@@ -134,9 +134,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	vertical_pos += haystack.height();
     }
 
-    let mut descision_cutoff = u32::MAX;
-    let mut descision_score = 0.0;
-    let mut descision_index = -1;
+    let mut last_print_pos = 0;
+    let mut decision_cutoff = u32::MAX;
+    let mut decision_score = 0.0;
+    let mut decision_index = -1;
 
     for x in 0..haystack.width() {
 	// What is the highest scoring digit
@@ -147,26 +148,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    if value < THRESHOLD {
 		continue;
 	    }
-	    if value > descision_score {
+	    if value > decision_score {
 		found_index = i as i32;
-		descision_score = value;
+		decision_score = value;
 	    }
 	}
 
-	if found_index >= 0 && found_index != descision_index {
-	    descision_index = found_index;
-	    descision_cutoff = x + digits[descision_index as usize].width() as u32;
+	if found_index >= 0 && found_index != decision_index {
+	    decision_index = found_index;
+	    decision_cutoff = x + digits[decision_index as usize].width() as u32;
 	}
 
-	if x >= descision_cutoff {
-	    println!("Digit {} at {}", descision_index, x);
-	    let digit = &digits[descision_index as usize];
+	if x >= decision_cutoff {
+	    println!("Digit {} at {} (Δ={})", decision_index, x,
+		     x - last_print_pos);
+	    last_print_pos = x;
+	    let digit = &digits[decision_index as usize];
 	    image::imageops::overlay(&mut output, digit,
-				     x as i64,
+				     (max_digit_width + (x - digit.width()))
+				     as i64,
 				     vertical_pos as i64);
-	    descision_cutoff = u32::MAX;
-	    descision_index = -1;
-	    descision_score = 0.0;
+	    decision_cutoff = u32::MAX;
+	    decision_index = -1;
+	    decision_score = 0.0;
 	}
     }
     // The final chosen match.
