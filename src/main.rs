@@ -2,6 +2,7 @@ use image::{DynamicImage,GrayImage,Luma};
 use std::env;
 use std::cmp;
 
+#[cfg(feature = "debug_img")]
 mod debugdigit;
 
 pub const THRESHOLD:f32 = 0.6;
