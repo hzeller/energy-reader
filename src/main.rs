@@ -2,7 +2,16 @@ use image::{DynamicImage,GrayImage,Luma};
 use std::env;
 use std::cmp;
 
-const THRESHOLD:f32 = 0.6;
+mod debugdigit;
+
+pub const THRESHOLD:f32 = 0.6;
+
+pub struct DigitPos {
+    digit: u32,
+    score: f32,
+    pos: u32,
+}
+pub type ColumnFeatureScore = Vec<f32>;
 
 fn load_image_as_grayscale(path : &str) -> GrayImage {
     let rgba = image::open(path).unwrap().into_rgba8();
@@ -10,7 +19,7 @@ fn load_image_as_grayscale(path : &str) -> GrayImage {
 }
 
 // Score of the particular digit image at a particular position.
-type ColumnFeatureScore = Vec<f32>;
+
 
 // Determine score of given needle pattern existing at given haystack column.
 fn cross_correlate(haystack: &GrayImage, needle: &GrayImage)
@@ -74,12 +83,6 @@ fn sobel(input: &GrayImage) -> GrayImage {
     result
 }
 
-struct DigitPos {
-    digit: u32,
-    score: f32,
-    pos: u32,
-}
-
 fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
 		 digit_width: u32)
 		 -> Vec<DigitPos> {
@@ -110,7 +113,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
 // Params: energy-reader image <digit0> <digit1>...
 fn main() {
     // First image is the text containing image, followed by digits.
-    let haystack_file = env::args().nth(1).unwrap();
+    let haystack_file = env::args().nth(1).expect("want metering image.");
     let haystack = sobel(&load_image_as_grayscale(haystack_file.as_str()));
 
     let mut max_digit_width = 0;
@@ -130,9 +133,14 @@ fn main() {
 
     let digit_locations = locate_digits(&digit_scores, haystack.width(),
 					max_digit_width);
-    for loc in digit_locations {
+    for loc in &digit_locations {
 	println!("{} {} {:4} {:.3}", loc.digit,
 		 env::args().nth((loc.digit + 2) as usize)
 		 .expect("should be valid arg"), loc.pos, loc.score);
     }
+
+    #[cfg(feature = "debug_img")]
+    debugdigit::debug_print_digits(&haystack, &digits, max_digit_width,
+				   &digit_scores, &digit_locations)
+	.save("output.png").unwrap();
 }
