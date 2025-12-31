@@ -217,8 +217,14 @@ fn sobel(input: &GrayImage) -> GrayImage {
             let se = input.get_pixel(x + 2, y + 2)[0] as i32;
 
             // Sobel kernel in x and y direction
-            let gx = -nw + ne + (-2 * west) + (2 * east) + -sw + se;
-            let gy = -nw + (-2 * north) + -ne + sw + (2 * south) + se;
+            #[rustfmt::skip]
+            let gx = -nw         + ne
+		+    (-2 * west) + (2 * east)
+		+    -sw         + se;
+
+            #[rustfmt::skip]
+            let gy = -nw + (-2 * north) + -ne
+		+     sw + ( 2 * south) +  se;
 
             let mut mag = ((gx as f32).powi(2) + (gy as f32).powi(2)).sqrt();
 
@@ -231,11 +237,8 @@ fn sobel(input: &GrayImage) -> GrayImage {
 }
 
 // Find the hightest score digits and emit their positions.
-fn locate_digits(
-    scores: &[ColumnFeatureScore],
-    picture_width: u32,
-    digit_width: u32,
-) -> Vec<DigitPos> {
+fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
+		 digit_width: u32) -> Vec<DigitPos> {
     let mut result = Vec::new();
     let mut current = DigitPos {
         digit: u32::MAX,
@@ -283,13 +286,14 @@ fn main() {
         digits.push(digit);
     }
 
-    // Create similarity score per haystack pixel column.
+
     let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
     for digit in digits.iter() {
         let highest_column = cross_correlate_ncc_fft(&haystack, digit);
         digit_scores.push(highest_column);
     }
 
+    // Output to stdout for further processing.
     let digit_locations = locate_digits(&digit_scores, haystack.width(), max_digit_width);
     for loc in &digit_locations {
         println!(
