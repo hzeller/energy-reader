@@ -60,14 +60,15 @@ pub fn debug_print_digits(
     }
 
     // The final recognized digits.
-    for found_pos in digit_positions {
-        let digit_pic = &digits[found_pos.digit as usize];
+    for loc in digit_positions {
+        let digit_pic = &digits[loc.digit as usize];
         image::imageops::overlay(
             &mut output,
             digit_pic,
-            (max_digit_width + found_pos.pos) as i64,
+            (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
+	eprintln!("{} {:4} {:.3}", loc.digit, loc.pos, loc.score);
     }
 
     output

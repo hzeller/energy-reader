@@ -27,9 +27,24 @@ Then running the program on
 
 ![](img/example-counter.png)
 
-will output a list with one line per matching digit. The columns contain the digit,
-their positions on the x-axis and a score, which will allow post-processing to determine
-if the data looks plausible:
+will output the sequence of digits observed, here `17300734`, so it can be used directly
+in scripts for further processing.
+
+If there is a plausibility check failing (uneven physical distance of digits
+or not exepected number of digits), then there is an error message on stderr and
+exit code is non-zero (while stdout still outputs whatever digits it could
+read).
+
+## Debugging
+If compiled with `--features debug_img`, a `./debug-output.png` image is created
+to illustrate how well each digit scores on each column of the meter image.
+It shows the edge-preprocessed original image, a spark-line of 'matching score'
+for each digit and as final row with the assembled images of the match digits.
+
+![](img/example-output.png)
+
+It also outputs a list (to stderr) with one line per matching digit.
+The columns contain the digit, their positions on the x-axis and a score.
 
 ```
 1   37 0.839
@@ -41,11 +56,3 @@ if the data looks plausible:
 3  580 0.957
 4  676 0.921
 ```
-
-If compiled with `--features debug_img`, a `debug-output.png` image is created
-to illustrate how well each digit scores on each column of the meter image.
-It shows the edge-preprocessed original image, a sparkline of 'matching score'
-for each digit and as final row with the assembled images of the match digits.
-
-
-![](img/example-output.png)

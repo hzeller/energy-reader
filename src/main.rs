@@ -3,6 +3,7 @@
 use image::{DynamicImage, GrayImage, Luma};
 use std::cmp;
 use std::env;
+use std::process::ExitCode;
 
 mod cross_correlator;
 use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
@@ -11,6 +12,10 @@ use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
 mod debugdigit;
 
 pub const THRESHOLD: f32 = 0.6;
+
+// Plausibility checks
+const ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT: f32 = 12.0;
+const EXPECTED_DIGIT_COUNT: usize = 8;
 
 #[derive(Clone)]
 pub struct DigitPos {
@@ -90,8 +95,29 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
     result
 }
 
+fn looks_plausible(locations: &[DigitPos]) -> Result<(), String> {
+    if locations.len() < EXPECTED_DIGIT_COUNT {
+	return Err(format!("Got #{} digits, but expected {}",
+			   locations.len(), EXPECTED_DIGIT_COUNT));
+    }
+    const LO_ALLOW: f32 = 1.0 - ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
+    const HI_ALLOW: f32 = 1.0 + ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
+    let mut last_delta = (locations[1].pos - locations[0].pos) as f32;
+    for i in 2..locations.len() {
+	let now_delta = (locations[i].pos - locations[i-1].pos) as f32;
+	let fraction = now_delta / last_delta;
+	if !(LO_ALLOW ..= HI_ALLOW).contains(&fraction) {
+	    return Err(format!(
+		"Digit distance before {:.0}, now {:.0} ({:.1}%) is more than expected ±{}% off.",
+		last_delta, now_delta, 100.0 * fraction, ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT));
+	}
+	last_delta = now_delta;
+    }
+    Ok(())
+}
+
 // Params: energy-reader <counter-image> <digit0> <digit1>...
-fn main() {
+fn main() -> ExitCode {
     // First image is the text containing image, followed by digits.
     let haystack_file = env::args().nth(1).expect("want metering image.");
     let haystack = sobel(&load_image_as_grayscale(haystack_file.as_str()));
@@ -114,9 +140,6 @@ fn main() {
 
     // Output to stdout for further processing.
     let digit_locations = locate_digits(&digit_scores, max_digit_w);
-    for loc in &digit_locations {
-        println!("{} {:4} {:.3}", loc.digit, loc.pos, loc.score);
-    }
 
     #[cfg(feature = "debug_img")]
     debugdigit::debug_print_digits(
@@ -129,4 +152,15 @@ fn main() {
     )
     .save("debug-output.png")
     .unwrap();
+
+    // Independent of plausiblity, always print observed digits.
+    for loc in &digit_locations {
+	print!("{}", loc.digit);
+    }
+    println!();
+
+    match looks_plausible(&digit_locations) {
+	Err(e) => { eprintln!("{}", e); ExitCode::FAILURE }
+	Ok(_) => ExitCode::SUCCESS
+    }
 }
