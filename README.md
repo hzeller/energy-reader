@@ -9,7 +9,7 @@ cross correlation.
 ## Build
 
 ```
-cargo build
+cargo build --release
 ```
 
 ## Run
