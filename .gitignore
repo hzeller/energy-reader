@@ -1,0 +1,6 @@
+/target
+*~
+.envrc
+.direnv
+Cargo.lock
+debug-output.png

@@ -127,6 +127,6 @@ fn main() {
         &digit_scores,
         &digit_locations,
     )
-    .save("output.png")
+    .save("debug-output.png")
     .unwrap();
 }

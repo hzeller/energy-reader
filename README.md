@@ -42,10 +42,10 @@ if the data looks plausible:
 4  676 0.921
 ```
 
-If compiled with `--features debug_img`, a debug image is created to figure
-out how well each digit scores on each column of the meter image. It shows the edge-preprocessed
-original image, a sparkline of 'matching score' for each digit and as final row with the assembled
-images of the match digits.
+If compiled with `--features debug_img`, a `debug-output.png` image is created
+to illustrate how well each digit scores on each column of the meter image.
+It shows the edge-preprocessed original image, a sparkline of 'matching score'
+for each digit and as final row with the assembled images of the match digits.
 
 
 ![](img/example-output.png)
