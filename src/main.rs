@@ -1,12 +1,12 @@
-use image::{DynamicImage,GrayImage,Luma};
-use std::env;
-use std::cmp;
+use image::{DynamicImage, GrayImage, Luma};
 use rustfft::{FftPlanner, num_complex::Complex};
+use std::cmp;
+use std::env;
 
 #[cfg(feature = "debug_img")]
 mod debugdigit;
 
-pub const THRESHOLD:f32 = 0.6;
+pub const THRESHOLD: f32 = 0.6;
 
 pub struct DigitPos {
     digit: u32,
@@ -15,7 +15,7 @@ pub struct DigitPos {
 }
 pub type ColumnFeatureScore = Vec<f32>;
 
-fn load_image_as_grayscale(path : &str) -> GrayImage {
+fn load_image_as_grayscale(path: &str) -> GrayImage {
     let rgba = image::open(path).unwrap().into_rgba8();
     DynamicImage::ImageRgba8(rgba).into_luma8()
 }
@@ -48,7 +48,11 @@ fn create_integral_images(img: &GrayImage) -> IntegralImages {
             sum_sq[idx] = row_sum_sq + sum_sq[above_idx];
         }
     }
-    IntegralImages { sum, sum_sq, width: w + 1, }
+    IntegralImages {
+        sum,
+        sum_sq,
+        width: w + 1,
+    }
 }
 
 impl IntegralImages {
@@ -59,15 +63,13 @@ impl IntegralImages {
 
         let get_val = |data: &[u64], px: usize, py: usize| data[py * self.width + px] as f32;
 
-        let s = get_val(&self.sum, x2, y2)
-                - get_val(&self.sum, x, y2)
-                - get_val(&self.sum, x2, y)
-                + get_val(&self.sum, x, y);
+        let s = get_val(&self.sum, x2, y2) - get_val(&self.sum, x, y2) - get_val(&self.sum, x2, y)
+            + get_val(&self.sum, x, y);
 
         let s_sq = get_val(&self.sum_sq, x2, y2)
-                   - get_val(&self.sum_sq, x, y2)
-                   - get_val(&self.sum_sq, x2, y)
-                   + get_val(&self.sum_sq, x, y);
+            - get_val(&self.sum_sq, x, y2)
+            - get_val(&self.sum_sq, x2, y)
+            + get_val(&self.sum_sq, x, y);
 
         (s, s_sq)
     }
@@ -84,12 +86,13 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
     let n_avg = n_sum / n_pixels;
 
     // Calculate needle variance
-    let n_sq_diff_sum: f32 = needle.iter()
-	.map(|&p| {
+    let n_sq_diff_sum: f32 = needle
+        .iter()
+        .map(|&p| {
             let diff = p as f32 - n_avg;
             diff * diff
-	})
-	.sum();
+        })
+        .sum();
     let n_std_dev = n_sq_diff_sum.sqrt();
 
     // 2. Prepare Integral Images for Haystack
@@ -100,24 +103,31 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
     let height = (haystack.height() + needle.height()).next_power_of_two() as usize;
 
     let mut n_space = vec![Complex::new(0.0, 0.0); width * height];
-    n_space.chunks_exact_mut(width).zip(needle.rows())
-	.for_each(|(padded_row, image_row)| {    // For each pair...
-            padded_row.iter_mut()                // Iterate over the padded row
-		.zip(image_row)                  // Zip with pixels in the image row
-		.for_each(|(target, pixel)| {
+    n_space
+        .chunks_exact_mut(width)
+        .zip(needle.rows())
+        .for_each(|(padded_row, image_row)| {
+            // For each pair...
+            padded_row
+                .iter_mut() // Iterate over the padded row
+                .zip(image_row) // Zip with pixels in the image row
+                .for_each(|(target, pixel)| {
                     *target = Complex::new(pixel[0] as f32 - n_avg, 0.0);
-		});
-	});
+                });
+        });
 
     let mut h_space = vec![Complex::new(0.0, 0.0); width * height];
-    h_space.chunks_exact_mut(width).zip(haystack.rows())
-	.for_each(|(padded_row, image_row)| {
-            padded_row.iter_mut()
-		.zip(image_row)
-		.for_each(|(target, pixel)| {
+    h_space
+        .chunks_exact_mut(width)
+        .zip(haystack.rows())
+        .for_each(|(padded_row, image_row)| {
+            padded_row
+                .iter_mut()
+                .zip(image_row)
+                .for_each(|(target, pixel)| {
                     *target = Complex::new(pixel[0] as f32, 0.0);
-		});
-	});
+                });
+        });
 
     // 4. Perform FFTs & Conjugate Multiplication
     let mut planner = FftPlanner::new();
@@ -133,11 +143,11 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
     // 5. Normalization and extracting max in column as feature score
     let fft_norm = (width * height) as f32;
     (0..(haystack.width() - needle.width()))
-	.map(|x| {
+        .map(|x| {
             let x = x as usize;
             // Find max score in this column
             (0..(haystack.height() - needle.height()) as usize)
-		.map(|y| {
+                .map(|y| {
                     let numerator = h_space[y * width + x].re / fft_norm;
                     let (sum, sum_sq) = integral.get_window_stats(x, y, nw, nh);
 
@@ -145,14 +155,24 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
                     let denom = n_std_dev * h_var.sqrt();
 
                     if denom > 1e-6 { numerator / denom } else { 0.0 }
-		})
-		.fold(0.0f32, |max, score| max.max(score)) // Efficiently find the max
-	})
-	.collect()
+                })
+                .fold(0.0f32, |max, score| max.max(score)) // Efficiently find the max
+        })
+        .collect()
 }
 
-fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize, planner: &mut FftPlanner<f32>, inverse: bool) {
-    let fft_row = if inverse { planner.plan_fft_inverse(width) } else { planner.plan_fft_forward(width) };
+fn fft_2d(
+    data: &mut [Complex<f32>],
+    width: usize,
+    height: usize,
+    planner: &mut FftPlanner<f32>,
+    inverse: bool,
+) {
+    let fft_row = if inverse {
+        planner.plan_fft_inverse(width)
+    } else {
+        planner.plan_fft_forward(width)
+    };
 
     // Rows: process each chunk directly
     data.chunks_exact_mut(width).for_each(|row| {
@@ -160,12 +180,14 @@ fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize, planner: &mut 
     });
 
     // Columns: Use iterators to pull and push column data
-    let fft_col = if inverse { planner.plan_fft_inverse(height) } else { planner.plan_fft_forward(height) };
+    let fft_col = if inverse {
+        planner.plan_fft_inverse(height)
+    } else {
+        planner.plan_fft_forward(height)
+    };
 
     for x in 0..width {
-        let mut column: Vec<_> = (0..height)
-            .map(|y| data[y * width + x])
-            .collect();
+        let mut column: Vec<_> = (0..height).map(|y| data[y * width + x]).collect();
 
         fft_col.process(&mut column);
 
@@ -184,26 +206,23 @@ fn sobel(input: &GrayImage) -> GrayImage {
     for x in 0..width {
         for y in 0..height {
             let nw = input.get_pixel(x, y)[0] as i32;
-	    let north = input.get_pixel(x + 1 , y)[0] as i32;
+            let north = input.get_pixel(x + 1, y)[0] as i32;
             let ne = input.get_pixel(x + 2, y)[0] as i32;
 
             let west = input.get_pixel(x, y + 1)[0] as i32;
             let east = input.get_pixel(x + 2, y + 1)[0] as i32;
 
-	    let sw = input.get_pixel(x, y + 2)[0] as i32;
-	    let south = input.get_pixel(x + 1, y + 2)[0] as i32;
+            let sw = input.get_pixel(x, y + 2)[0] as i32;
+            let south = input.get_pixel(x + 1, y + 2)[0] as i32;
             let se = input.get_pixel(x + 2, y + 2)[0] as i32;
 
-	    // Sobel kernel in x and y direction
-	    let gx = -nw + ne
-		+    (-2 * west) + (2 * east)
-		+    -sw + se;
-	    let gy = -nw + (-2 * north) + -ne
-                +     sw + ( 2 * south) + se;
+            // Sobel kernel in x and y direction
+            let gx = -nw + ne + (-2 * west) + (2 * east) + -sw + se;
+            let gy = -nw + (-2 * north) + -ne + sw + (2 * south) + se;
 
             let mut mag = ((gx as f32).powi(2) + (gy as f32).powi(2)).sqrt();
 
-	    mag = mag.clamp(0.0, 255.0);
+            mag = mag.clamp(0.0, 255.0);
 
             result.put_pixel(x, y, Luma([mag as u8]));
         }
@@ -212,29 +231,40 @@ fn sobel(input: &GrayImage) -> GrayImage {
 }
 
 // Find the hightest score digits and emit their positions.
-fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
-		 digit_width: u32)
-		 -> Vec<DigitPos> {
+fn locate_digits(
+    scores: &[ColumnFeatureScore],
+    picture_width: u32,
+    digit_width: u32,
+) -> Vec<DigitPos> {
     let mut result = Vec::new();
-    let mut current = DigitPos{digit: u32::MAX, score: 0.0, pos: picture_width};
+    let mut current = DigitPos {
+        digit: u32::MAX,
+        score: 0.0,
+        pos: picture_width,
+    };
     for x in 0..picture_width - digit_width {
-	// What is the highest scoring digit in each of the picture columns
-	for (i, feature_score) in scores.iter().enumerate() {
-	    let digit_score = feature_score[x as usize];
-	    if digit_score < THRESHOLD {
-		continue;
-	    }
-	    if digit_score > current.score {
-		current.digit = i as u32;
-		current.score = digit_score;
-		current.pos = x;
-	    }
-	}
+        // What is the highest scoring digit in each of the picture columns
+        for (i, feature_score) in scores.iter().enumerate() {
+            let digit_score = feature_score[x as usize];
+            if digit_score < THRESHOLD {
+                continue;
+            }
+            if digit_score > current.score {
+                current.digit = i as u32;
+                current.score = digit_score;
+                current.pos = x;
+            }
+        }
 
-	if x >= current.pos + digit_width {  // best seen for digit-width
-	    result.push(current);
-	    current = DigitPos{digit: u32::MAX, score: 0.0, pos: picture_width};
-	}
+        if x >= current.pos + digit_width {
+            // best seen for digit-width
+            result.push(current);
+            current = DigitPos {
+                digit: u32::MAX,
+                score: 0.0,
+                pos: picture_width,
+            };
+        }
     }
     result
 }
@@ -248,28 +278,39 @@ fn main() {
     let mut max_digit_width = 0;
     let mut digits = Vec::new();
     for digit_picture in env::args().skip(2) {
-	let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
-	max_digit_width = cmp::max(max_digit_width, digit.width());
-	digits.push(digit);
+        let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
+        max_digit_width = cmp::max(max_digit_width, digit.width());
+        digits.push(digit);
     }
 
     // Create similarity score per haystack pixel column.
-    let mut digit_scores : Vec<ColumnFeatureScore> = Vec::new();
+    let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
     for digit in digits.iter() {
-	let highest_column = cross_correlate_ncc_fft(&haystack, digit);
-	digit_scores.push(highest_column);
+        let highest_column = cross_correlate_ncc_fft(&haystack, digit);
+        digit_scores.push(highest_column);
     }
 
-    let digit_locations = locate_digits(&digit_scores, haystack.width(),
-					max_digit_width);
+    let digit_locations = locate_digits(&digit_scores, haystack.width(), max_digit_width);
     for loc in &digit_locations {
-	println!("{} {} {:4} {:.3}", loc.digit,
-		 env::args().nth((loc.digit + 2) as usize)
-		 .expect("should be valid arg"), loc.pos, loc.score);
+        println!(
+            "{} {} {:4} {:.3}",
+            loc.digit,
+            env::args()
+                .nth((loc.digit + 2) as usize)
+                .expect("should be valid arg"),
+            loc.pos,
+            loc.score
+        );
     }
 
     #[cfg(feature = "debug_img")]
-    debugdigit::debug_print_digits(&haystack, &digits, max_digit_width,
-				   &digit_scores, &digit_locations)
-	.save("output.png").unwrap();
+    debugdigit::debug_print_digits(
+        &haystack,
+        &digits,
+        max_digit_width,
+        &digit_scores,
+        &digit_locations,
+    )
+    .save("output.png")
+    .unwrap();
 }
