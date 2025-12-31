@@ -114,7 +114,7 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> Vec<f32>
     fft_2d(&mut n_space, width, height, &mut planner, false);
 
     for i in 0..h_space.len() {
-        h_space[i] = h_space[i] * n_space[i].conj();
+        h_space[i] *= n_space[i].conj();
     }
 
     fft_2d(&mut h_space, width, height, &mut planner, true);
@@ -123,9 +123,9 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> Vec<f32>
     let mut output = vec![0.0; haystack.width() as usize];
     let fft_norm = (width * height) as f32;
 
-    for x in 0..(haystack.width() - needle.width() as u32) as usize {
+    for x in 0..(haystack.width() - needle.width()) as usize {
         let mut column_max = -1.0f32;
-        for y in 0..(haystack.height() - needle.height() as u32) as usize {
+        for y in 0..(haystack.height() - needle.height()) as usize {
             // Get numerator from FFT result
             let numerator = h_space[y * width + x].re / fft_norm;
 
