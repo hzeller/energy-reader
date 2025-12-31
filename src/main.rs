@@ -1,6 +1,7 @@
 use image::{DynamicImage,GrayImage,Luma};
 use std::env;
 use std::cmp;
+use rustfft::{FftPlanner, num_complex::Complex};
 
 #[cfg(feature = "debug_img")]
 mod debugdigit;
@@ -19,33 +20,80 @@ fn load_image_as_grayscale(path : &str) -> GrayImage {
     DynamicImage::ImageRgba8(rgba).into_luma8()
 }
 
-// Score of the particular digit image at a particular position.
-
 
 // Determine score of given needle pattern existing at given haystack column.
-fn cross_correlate(haystack: &GrayImage, needle: &GrayImage)
-		   -> ColumnFeatureScore {
-    // Prepare to normalize the output.
-    let needle_sum = needle.iter().fold(0, |sum:u32, &p| { sum + p as u32 });
-    let mut output = vec![0.0; haystack.width() as usize];
+fn cross_correlate_fft(haystack: &GrayImage, needle: &GrayImage) -> Vec<f32> {
+    let needle_sum: f32 = needle.iter().map(|&p| p as f32).sum();
 
-    // Expensive, but ok for now as we only look at a small image.
-    for hx in 0..haystack.width() - needle.width() {
-	let mut column_high_score : f32 = 0.0;
-	for hy in 0..haystack.height() - needle.height() {
-	    let mut value = 0.0;
-	    for ny in 0..needle.height() {
-		for nx in 0..needle.width() {
-		    value += needle.get_pixel(nx, ny)[0] as f32 *
-			haystack.get_pixel(hx+nx, hy+ny)[0] as f32;
-		}
-	    }
-	    value /= needle_sum as f32;
-	    column_high_score = column_high_score.max(value / 255.0);
-	}
-	output[hx as usize] = column_high_score;
+    // 1. Determine optimal FFT size (at least H + N - 1)
+    let width = (haystack.width() + needle.width()).next_power_of_two() as usize;
+    let height = (haystack.height() + needle.height()).next_power_of_two() as usize;
+
+    // 2. Prepare data in Complex form
+    let mut h_space = vec![Complex::new(0.0, 0.0); width * height];
+    let mut n_space = vec![Complex::new(0.0, 0.0); width * height];
+
+    for y in 0..haystack.height() as usize {
+        for x in 0..haystack.width() as usize {
+            h_space[y * width + x] = Complex::new(haystack.get_pixel(x as u32, y as u32)[0] as f32, 0.0);
+        }
     }
+    for y in 0..needle.height() as usize {
+        for x in 0..needle.width() as usize {
+            n_space[y * width + x] = Complex::new(needle.get_pixel(x as u32, y as u32)[0] as f32, 0.0);
+        }
+    }
+
+    // 3. Perform 2D FFT
+    let mut planner = FftPlanner::new();
+    fft_2d(&mut h_space, width, height, &mut planner, false);
+    fft_2d(&mut n_space, width, height, &mut planner, false);
+
+    // 4. Point-wise multiply: Haystack * Conj(Needle)
+    for i in 0..h_space.len() {
+        h_space[i] *= n_space[i].conj();
+    }
+
+    // 5. Inverse 2D FFT
+    fft_2d(&mut h_space, width, height, &mut planner, true);
+
+    // 6. Extract results (max per column)
+    let mut output = vec![0.0; haystack.width() as usize];
+    let norm = (width * height) as f32 * needle_sum * 255.0;
+
+    for x in 0..haystack.width() as usize {
+        let mut column_max = 0.0f32;
+        // Only iterate over valid overlap regions
+        for y in 0..(haystack.height() - needle.height()) as usize {
+            let val = h_space[y * width + x].re / norm;
+            column_max = column_max.max(val);
+        }
+        output[x] = column_max;
+    }
+
     output
+}
+
+fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize, planner: &mut FftPlanner<f32>, inverse: bool) {
+    let fft = if inverse { planner.plan_fft_inverse(width) } else { planner.plan_fft_forward(width) };
+
+    // Rows
+    for row in data.chunks_exact_mut(width) {
+        fft.process(row);
+    }
+
+    // Columns (Transpose-like access)
+    let fft_col = if inverse { planner.plan_fft_inverse(height) } else { planner.plan_fft_forward(height) };
+    let mut column = vec![Complex::new(0.0, 0.0); height];
+    for x in 0..width {
+        for y in 0..height {
+            column[y] = data[y * width + x];
+        }
+        fft_col.process(&mut column);
+        for y in 0..height {
+            data[y * width + x] = column[y];
+        }
+    }
 }
 
 // Classic edge detection.
@@ -128,7 +176,7 @@ fn main() {
     // Create similarity score per haystack pixel column.
     let mut digit_scores : Vec<ColumnFeatureScore> = Vec::new();
     for digit in digits.iter() {
-	let highest_column = cross_correlate(&haystack, digit);
+	let highest_column = cross_correlate_fft(&haystack, digit);
 	digit_scores.push(highest_column);
     }
 

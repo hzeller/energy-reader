@@ -8,3 +8,4 @@ debug_img = []
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
+rustfft = "6.4.1"
