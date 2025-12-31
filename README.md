@@ -18,31 +18,34 @@ cargo build --release
 energy-reader image-of-counter.png digit-0.png digit-1.png ...
 ```
 
-The digits need to be pre-processed images of digits extracted from images of
-counters before (i.e. same size as they appear in the counter).
+The digit-images need to be extracted from images of counters before, i.e. single digits the same
+size as they appear in the counter, such as:
+
+![](img/digit-3.png)
 
 Then running the program on
 
 ![](img/example-counter.png)
 
-will output a list of the matching digits. First column is the digit,
-followed by the corresponding file-name, the x-position in the image and
-score; easy to process with awk etc.
+will output a list with one line per matching digit. The columns contain the digit,
+their positions on the x-axis and a score, which will allow post-processing to determine
+if the data looks plausible:
 
 ```
-1 img-foo/digit-1.png   37 0.839
-7 img-foo/digit-7.png  132 0.791
-3 img-foo/digit-3.png  221 0.802
-0 img-foo/digit-0.png  309 0.797
-0 img-foo/digit-0.png  399 0.927
-7 img-foo/digit-7.png  492 0.909
-3 img-foo/digit-3.png  580 0.957
-4 img-foo/digit-4.png  676 0.921
+1   37 0.839
+7  132 0.791
+3  221 0.802
+0  309 0.797
+0  399 0.927
+7  492 0.909
+3  580 0.957
+4  676 0.921
 ```
 
 If compiled with `--features debug_img`, a debug image is created to figure
-out how well things score; it shows the edge-preprocessed original image,
-a sparkkline of 'matching score' for each digit and as final row thw chosen
-digits.
+out how well each digit scores on each column of the meter image. It shows the edge-preprocessed
+original image, a sparkline of 'matching score' for each digit and as final row with the assembled
+images of the match digits.
+
 
 ![](img/example-output.png)
