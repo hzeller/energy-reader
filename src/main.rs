@@ -1,5 +1,5 @@
 use image::{DynamicImage, GrayImage, Luma};
-use rustfft::{FftPlanner, num_complex::Complex};
+use rustfft::{FftPlanner, num_complex::Complex, FftDirection};
 use std::cmp;
 use std::env;
 
@@ -8,6 +8,7 @@ mod debugdigit;
 
 pub const THRESHOLD: f32 = 0.6;
 
+#[derive(Clone)]
 pub struct DigitPos {
     digit: u32,
     score: f32,
@@ -78,43 +79,13 @@ impl IntegralImages {
 // Determine score of given needle pattern existing at given haystack column.
 // Use FFT and the integral image to produce a normalized cross correlation.
 fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFeatureScore {
-    let (nw, nh) = (needle.width() as usize, needle.height() as usize);
-    let n_pixels = (nw * nh) as f32;
-
-    // 1. Prepare Zero-Mean Needle
+    let n_pixels = (needle.width() * needle.height()) as f32;
     let n_sum: f32 = needle.iter().map(|&p| p as f32).sum();
     let n_avg = n_sum / n_pixels;
 
-    // Calculate needle variance
-    let n_sq_diff_sum: f32 = needle
-        .iter()
-        .map(|&p| {
-            let diff = p as f32 - n_avg;
-            diff * diff
-        })
-        .sum();
-    let n_std_dev = n_sq_diff_sum.sqrt();
-
-    // 2. Prepare Integral Images for Haystack
-    let integral = create_integral_images(haystack);
-
-    // 3. FFT Setup (Padding)
-    let width = (haystack.width() + needle.width()).next_power_of_two() as usize;
-    let height = (haystack.height() + needle.height()).next_power_of_two() as usize;
-
-    let mut n_space = vec![Complex::new(0.0, 0.0); width * height];
-    n_space
-        .chunks_exact_mut(width)
-        .zip(needle.rows())
-        .for_each(|(padded_row, image_row)| {
-            // For each pair...
-            padded_row
-                .iter_mut() // Iterate over the padded row
-                .zip(image_row) // Zip with pixels in the image row
-                .for_each(|(target, pixel)| {
-                    *target = Complex::new(pixel[0] as f32 - n_avg, 0.0);
-                });
-        });
+    // Create padded complex representations of images.
+    let width = (haystack.width() + needle.width()) as usize;
+    let height = (haystack.height() + needle.height()) as usize;
 
     let mut h_space = vec![Complex::new(0.0, 0.0); width * height];
     h_space
@@ -129,18 +100,44 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
                 });
         });
 
-    // 4. Perform FFTs & Conjugate Multiplication
+    let mut n_space = vec![Complex::new(0.0, 0.0); width * height];
+    n_space
+        .chunks_exact_mut(width)
+        .zip(needle.rows())
+        .for_each(|(padded_row, image_row)| {
+            padded_row
+                .iter_mut()
+                .zip(image_row)
+                .for_each(|(target, pixel)| {
+                    *target = Complex::new(pixel[0] as f32 - n_avg, 0.0);
+                });
+        });
+
+    // Cross correlation using fft
     let mut planner = FftPlanner::new();
-    fft_2d(&mut h_space, width, height, &mut planner, false);
-    fft_2d(&mut n_space, width, height, &mut planner, false);
+    fft_2d(&mut h_space, width, height, &mut planner, FftDirection::Forward);
+    fft_2d(&mut n_space, width, height, &mut planner, FftDirection::Forward);
 
     h_space.iter_mut().zip(n_space.iter()).for_each(|(h, n)| {
         *h *= n.conj();
     });
 
-    fft_2d(&mut h_space, width, height, &mut planner, true);
+    fft_2d(&mut h_space, width, height, &mut planner, FftDirection::Inverse);
 
-    // 5. Normalization and extracting max in column as feature score
+
+    let (nw, nh) = (needle.width() as usize, needle.height() as usize);
+
+    // Prepare needle variance for normalized cross correlation
+    let n_sq_diff_sum: f32 = needle
+        .iter()
+        .map(|&p| {
+            let diff = p as f32 - n_avg;
+            diff * diff
+        })
+        .sum();
+    let n_std_dev = n_sq_diff_sum.sqrt();
+
+    let summed_area = create_integral_images(haystack);
     let fft_norm = (width * height) as f32;
     (0..(haystack.width() - needle.width()))
         .map(|x| {
@@ -149,7 +146,7 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
             (0..(haystack.height() - needle.height()) as usize)
                 .map(|y| {
                     let numerator = h_space[y * width + x].re / fft_norm;
-                    let (sum, sum_sq) = integral.get_window_stats(x, y, nw, nh);
+                    let (sum, sum_sq) = summed_area.get_window_stats(x, y, nw, nh);
 
                     let h_var = (sum_sq - (sum * sum) / n_pixels).max(0.0);
                     let denom = n_std_dev * h_var.sqrt();
@@ -161,31 +158,16 @@ fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> ColumnFe
         .collect()
 }
 
-fn fft_2d(
-    data: &mut [Complex<f32>],
-    width: usize,
-    height: usize,
-    planner: &mut FftPlanner<f32>,
-    inverse: bool,
-) {
-    let fft_row = if inverse {
-        planner.plan_fft_inverse(width)
-    } else {
-        planner.plan_fft_forward(width)
-    };
-
+fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
+	  planner: &mut FftPlanner<f32>, direction: FftDirection) {
     // Rows: process each chunk directly
+    let fft_row = planner.plan_fft(width, direction);
     data.chunks_exact_mut(width).for_each(|row| {
         fft_row.process(row);
     });
 
-    // Columns: Use iterators to pull and push column data
-    let fft_col = if inverse {
-        planner.plan_fft_inverse(height)
-    } else {
-        planner.plan_fft_forward(height)
-    };
-
+    // Extract columns, then operate on these
+    let fft_col = planner.plan_fft(height, direction);
     for x in 0..width {
         let mut column: Vec<_> = (0..height).map(|y| data[y * width + x]).collect();
 
@@ -218,18 +200,15 @@ fn sobel(input: &GrayImage) -> GrayImage {
 
             // Sobel kernel in x and y direction
             #[rustfmt::skip]
-            let gx = -nw         + ne
+            let gx = (-nw         + ne
 		+    (-2 * west) + (2 * east)
-		+    -sw         + se;
+		+    -sw         + se) as f32;
 
             #[rustfmt::skip]
-            let gy = -nw + (-2 * north) + -ne
-		+     sw + ( 2 * south) +  se;
+            let gy = (-nw + (-2 * north) + -ne
+		+     sw + ( 2 * south) +  se) as f32;
 
-            let mut mag = ((gx as f32).powi(2) + (gy as f32).powi(2)).sqrt();
-
-            mag = mag.clamp(0.0, 255.0);
-
+            let mag = gx.hypot(gy).clamp(0.0, 255.0);
             result.put_pixel(x, y, Luma([mag as u8]));
         }
     }
@@ -237,15 +216,18 @@ fn sobel(input: &GrayImage) -> GrayImage {
 }
 
 // Find the hightest score digits and emit their positions.
-fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
-		 digit_width: u32) -> Vec<DigitPos> {
+fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
+		 -> Vec<DigitPos> {
+    // The shortest score vector is the max x-position we check out
+    let x_coverage = scores.iter().map(|v| v.len()).min().unwrap_or(0) as u32;
     let mut result = Vec::new();
-    let mut current = DigitPos {
+    let fresh_digit = DigitPos {
         digit: u32::MAX,
         score: 0.0,
-        pos: picture_width,
+        pos: x_coverage,
     };
-    for x in 0..picture_width - digit_width {
+    let mut current = fresh_digit.clone();
+    for x in 0..x_coverage {
         // What is the highest scoring digit in each of the picture columns
         for (i, feature_score) in scores.iter().enumerate() {
             let digit_score = feature_score[x as usize];
@@ -259,14 +241,9 @@ fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
             }
         }
 
-        if x >= current.pos + digit_width {
-            // best seen for digit-width
+        if x >= current.pos + digit_width { // best seen for digit-width
             result.push(current);
-            current = DigitPos {
-                digit: u32::MAX,
-                score: 0.0,
-                pos: picture_width,
-            };
+            current = fresh_digit.clone();
         }
     }
     result
@@ -294,7 +271,7 @@ fn main() {
     }
 
     // Output to stdout for further processing.
-    let digit_locations = locate_digits(&digit_scores, haystack.width(), max_digit_width);
+    let digit_locations = locate_digits(&digit_scores, max_digit_width);
     for loc in &digit_locations {
         println!(
             "{} {} {:4} {:.3}",
