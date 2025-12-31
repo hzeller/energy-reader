@@ -68,7 +68,7 @@ pub fn debug_print_digits(
             (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
-	eprintln!("{} {:4} {:.3}", loc.digit, loc.pos, loc.score);
+        eprintln!("{} {:4} {:.3}", loc.digit, loc.pos, loc.score);
     }
 
     output

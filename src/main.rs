@@ -97,21 +97,21 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
 
 fn looks_plausible(locations: &[DigitPos]) -> Result<(), String> {
     if locations.len() < EXPECTED_DIGIT_COUNT {
-	return Err(format!("Got #{} digits, but expected {}",
-			   locations.len(), EXPECTED_DIGIT_COUNT));
+        return Err(format!("Got #{} digits, but expected {}",
+                           locations.len(), EXPECTED_DIGIT_COUNT));
     }
     const LO_ALLOW: f32 = 1.0 - ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
     const HI_ALLOW: f32 = 1.0 + ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
     let mut last_delta = (locations[1].pos - locations[0].pos) as f32;
     for i in 2..locations.len() {
-	let now_delta = (locations[i].pos - locations[i-1].pos) as f32;
-	let fraction = now_delta / last_delta;
-	if !(LO_ALLOW ..= HI_ALLOW).contains(&fraction) {
-	    return Err(format!(
-		"Digit distance before {:.0}, now {:.0} ({:.1}%) is more than expected ±{}% off.",
-		last_delta, now_delta, 100.0 * fraction, ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT));
-	}
-	last_delta = now_delta;
+        let now_delta = (locations[i].pos - locations[i-1].pos) as f32;
+        let fraction = now_delta / last_delta;
+        if !(LO_ALLOW ..= HI_ALLOW).contains(&fraction) {
+            return Err(format!(
+                "Digit distance before {:.0}, now {:.0} ({:.1}%) is more than expected ±{}% off.",
+                last_delta, now_delta, 100.0 * fraction, ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT));
+        }
+        last_delta = now_delta;
     }
     Ok(())
 }
@@ -155,12 +155,12 @@ fn main() -> ExitCode {
 
     // Independent of plausiblity, always print observed digits.
     for loc in &digit_locations {
-	print!("{}", loc.digit);
+        print!("{}", loc.digit);
     }
     println!();
 
     match looks_plausible(&digit_locations) {
-	Err(e) => { eprintln!("{}", e); ExitCode::FAILURE }
-	Ok(_) => ExitCode::SUCCESS
+        Err(e) => { eprintln!("{}", e); ExitCode::FAILURE }
+        Ok(_) => ExitCode::SUCCESS
     }
 }
