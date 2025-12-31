@@ -45,13 +45,13 @@ fn sobel(input: &GrayImage) -> GrayImage {
 
             // Sobel kernel in x and y direction
             #[rustfmt::skip]
-            let gx = (-nw         + ne
-		+    (-2 * west) + (2 * east)
-		+    -sw         + se) as f32;
+            let gx = (-nw        + ne
+                +    (-2 * west) + (2 * east)
+                +    -sw         + se) as f32;
 
             #[rustfmt::skip]
-            let gy = (-nw + (-2 * north) + -ne
-		+     sw + ( 2 * south) +  se) as f32;
+            let gy = (-nw  + (-2 * north) + -ne
+                +     sw   + ( 2 * south) +  se) as f32;
 
             let mag = gx.hypot(gy).clamp(0.0, 255.0);
             result.put_pixel(x, y, Luma([mag as u8]));
@@ -62,7 +62,7 @@ fn sobel(input: &GrayImage) -> GrayImage {
 
 // Find the hightest score digits and emit their positions.
 fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
-		 -> Vec<DigitPos> {
+                 -> Vec<DigitPos> {
     // The shortest score vector is the max x-position we check out
     let x_range = scores.iter().map(|v| v.len()).min().unwrap_or(0) as u32;
     let mut result = Vec::new();
@@ -102,7 +102,7 @@ fn main() {
     for digit_picture in env::args().skip(2) {
         let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
         max_digit_w = cmp::max(max_digit_w, digit.width());
-	max_digit_h = cmp::max(max_digit_h, digit.height());
+        max_digit_h = cmp::max(max_digit_h, digit.height());
         digits.push(digit);
     }
 
@@ -123,6 +123,7 @@ fn main() {
         &haystack,
         &digits,
         max_digit_w,
+        max_digit_h,
         &digit_scores,
         &digit_locations,
     )

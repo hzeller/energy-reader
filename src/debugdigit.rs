@@ -26,12 +26,15 @@ pub fn debug_print_digits(
     haystack: &GrayImage,
     digits: &[GrayImage],
     max_digit_width: u32,
+    max_digit_height: u32,
     digit_scores: &[Vec<f32>],
     digit_positions: &[DigitPos],
 ) -> GrayImage {
+    let sparkline_height = (1.5 * max_digit_height as f32) as u32;
+
     let mut vertical_pos = 0;
     let width = max_digit_width + haystack.width();
-    let height = (1 + digits.len() as u32 + 1) * haystack.height();
+    let height = haystack.height() + (1 + digits.len() as u32) * sparkline_height;
     let mut output = GrayImage::new(width, height);
 
     // Original as first
@@ -46,15 +49,14 @@ pub fn debug_print_digits(
     // For each digit its sparkline
     for (i, digit) in digits.iter().enumerate() {
         image::imageops::overlay(&mut output, digit, 0, vertical_pos as i64);
-
-        let visualize = graph(&digit_scores[i], haystack.height());
+        let visualize = graph(&digit_scores[i], sparkline_height);
         image::imageops::overlay(
             &mut output,
             &visualize,
             max_digit_width as i64,
             vertical_pos as i64,
         );
-        vertical_pos += haystack.height();
+        vertical_pos += sparkline_height;
     }
 
     // The final recognized digits.
