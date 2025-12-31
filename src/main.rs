@@ -20,53 +20,129 @@ fn load_image_as_grayscale(path : &str) -> GrayImage {
     DynamicImage::ImageRgba8(rgba).into_luma8()
 }
 
+struct IntegralImages {
+    sum: Vec<u64>,
+    sum_sq: Vec<u64>,
+    width: usize,
+}
+
+fn create_integral_images(img: &GrayImage) -> IntegralImages {
+    let (w, h) = (img.width() as usize, img.height() as usize);
+    // We size it (w+1)x(h+1) to handle boundaries (zeros in the first row/col)
+    let mut sum = vec![0u64; (w + 1) * (h + 1)];
+    let mut sum_sq = vec![0u64; (w + 1) * (h + 1)];
+
+    for y in 0..h {
+        let mut row_sum = 0u64;
+        let mut row_sum_sq = 0u64;
+        for x in 0..w {
+            let pixel = img.get_pixel(x as u32, y as u32)[0] as u64;
+
+            row_sum += pixel;
+            row_sum_sq += pixel * pixel;
+
+            let idx = (y + 1) * (w + 1) + (x + 1);
+            let above_idx = y * (w + 1) + (x + 1);
+
+            sum[idx] = row_sum + sum[above_idx];
+            sum_sq[idx] = row_sum_sq + sum_sq[above_idx];
+        }
+    }
+    IntegralImages { sum, sum_sq, width: w + 1, }
+}
+
+impl IntegralImages {
+    // Returns (sum, sum_of_squares) for a rectangle at (x, y) with size (nw, nh)
+    fn get_window_stats(&self, x: usize, y: usize, nw: usize, nh: usize) -> (f64, f64) {
+        let x2 = x + nw;
+        let y2 = y + nh;
+
+        let get_val = |data: &[u64], px: usize, py: usize| data[py * self.width + px] as f64;
+
+        let s = get_val(&self.sum, x2, y2)
+                - get_val(&self.sum, x, y2)
+                - get_val(&self.sum, x2, y)
+                + get_val(&self.sum, x, y);
+
+        let s_sq = get_val(&self.sum_sq, x2, y2)
+                   - get_val(&self.sum_sq, x, y2)
+                   - get_val(&self.sum_sq, x2, y)
+                   + get_val(&self.sum_sq, x, y);
+
+        (s, s_sq)
+    }
+}
 
 // Determine score of given needle pattern existing at given haystack column.
-fn cross_correlate_fft(haystack: &GrayImage, needle: &GrayImage) -> Vec<f32> {
-    let needle_sum: f32 = needle.iter().map(|&p| p as f32).sum();
+// Use FFT and the integral image to produce a normalized cross correlation.
+fn cross_correlate_ncc_fft(haystack: &GrayImage, needle: &GrayImage) -> Vec<f32> {
+    let (nw, nh) = (needle.width() as usize, needle.height() as usize);
+    let n_pixels = (nw * nh) as f64;
 
-    // 1. Determine optimal FFT size (at least H + N - 1)
+    // 1. Prepare Zero-Mean Needle
+    let n_sum: f64 = needle.iter().map(|&p| p as f64).sum();
+    let n_avg = n_sum / n_pixels;
+    let mut n_sq_diff_sum = 0.0;
+
+    // 2. Prepare Integral Images for Haystack
+    let integral = create_integral_images(haystack);
+
+    // 3. FFT Setup (Padding)
     let width = (haystack.width() + needle.width()).next_power_of_two() as usize;
     let height = (haystack.height() + needle.height()).next_power_of_two() as usize;
-
-    // 2. Prepare data in Complex form
     let mut h_space = vec![Complex::new(0.0, 0.0); width * height];
     let mut n_space = vec![Complex::new(0.0, 0.0); width * height];
+
+    for y in 0..nh {
+        for x in 0..nw {
+            let val = needle.get_pixel(x as u32, y as u32)[0] as f64 - n_avg;
+            n_sq_diff_sum += val * val;
+            n_space[y * width + x] = Complex::new(val as f32, 0.0);
+        }
+    }
+    let n_std_dev = n_sq_diff_sum.sqrt();
 
     for y in 0..haystack.height() as usize {
         for x in 0..haystack.width() as usize {
             h_space[y * width + x] = Complex::new(haystack.get_pixel(x as u32, y as u32)[0] as f32, 0.0);
         }
     }
-    for y in 0..needle.height() as usize {
-        for x in 0..needle.width() as usize {
-            n_space[y * width + x] = Complex::new(needle.get_pixel(x as u32, y as u32)[0] as f32, 0.0);
-        }
-    }
 
-    // 3. Perform 2D FFT
+    // 4. Perform FFTs & Conjugate Multiplication
     let mut planner = FftPlanner::new();
     fft_2d(&mut h_space, width, height, &mut planner, false);
     fft_2d(&mut n_space, width, height, &mut planner, false);
 
-    // 4. Point-wise multiply: Haystack * Conj(Needle)
     for i in 0..h_space.len() {
-        h_space[i] *= n_space[i].conj();
+        h_space[i] = h_space[i] * n_space[i].conj();
     }
 
-    // 5. Inverse 2D FFT
     fft_2d(&mut h_space, width, height, &mut planner, true);
 
-    // 6. Extract results (max per column)
+    // 5. Normalization Loop
     let mut output = vec![0.0; haystack.width() as usize];
-    let norm = (width * height) as f32 * needle_sum * 255.0;
+    let fft_norm = (width * height) as f32;
 
-    for x in 0..haystack.width() as usize {
-        let mut column_max = 0.0f32;
-        // Only iterate over valid overlap regions
-        for y in 0..(haystack.height() - needle.height()) as usize {
-            let val = h_space[y * width + x].re / norm;
-            column_max = column_max.max(val);
+    for x in 0..(haystack.width() - needle.width() as u32) as usize {
+        let mut column_max = -1.0f32;
+        for y in 0..(haystack.height() - needle.height() as u32) as usize {
+            // Get numerator from FFT result
+            let numerator = h_space[y * width + x].re / fft_norm;
+
+            // Get local denominator from Integral Image
+            let (sum, sum_sq) = integral.get_window_stats(x, y, nw, nh);
+            let h_var = (sum_sq - (sum * sum) / n_pixels).max(0.0);
+            let h_std_dev = h_var.sqrt();
+
+            // NCC Formula: numerator / (std_dev_needle * std_dev_haystack)
+            let denom = n_std_dev * h_std_dev;
+            let score = if denom > 1e-6 {
+                (numerator as f64 / denom) as f32
+            } else {
+                0.0
+            };
+
+            column_max = column_max.max(score);
         }
         output[x] = column_max;
     }
@@ -132,6 +208,7 @@ fn sobel(input: &GrayImage) -> GrayImage {
     result
 }
 
+// Find the hightest score digits and emit their positions.
 fn locate_digits(scores: &[ColumnFeatureScore], picture_width: u32,
 		 digit_width: u32)
 		 -> Vec<DigitPos> {
@@ -176,7 +253,7 @@ fn main() {
     // Create similarity score per haystack pixel column.
     let mut digit_scores : Vec<ColumnFeatureScore> = Vec::new();
     for digit in digits.iter() {
-	let highest_column = cross_correlate_fft(&haystack, digit);
+	let highest_column = cross_correlate_ncc_fft(&haystack, digit);
 	digit_scores.push(highest_column);
     }
 

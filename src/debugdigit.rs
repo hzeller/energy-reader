@@ -9,7 +9,7 @@ fn graph(values: &[f32], height: u32) -> GrayImage {
     let white = Luma::<u8>::from([255;1]);
 
     for ix in 0..values.len() {
-	let value = values[ix];
+	let value = values[ix].clamp(0.0, 1.0);
 	let img_range = (height - 1) as f32;
 	let iy = ((1.0 - value) * img_range) as u32;
 	result.put_pixel(ix as u32, iy, white);
