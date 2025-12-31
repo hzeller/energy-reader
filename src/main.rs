@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use image::{DynamicImage, GrayImage, Luma};
 use std::cmp;
 use std::env;
