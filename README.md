@@ -15,29 +15,43 @@ cargo build --release
 ## Run
 
 ```
-energy-reader image-of-counter.png digit-0.png digit-1.png ...
+Usage: energy-reader [OPTIONS] [DIGIT_IMAGES]...
+
+Arguments:
+  [DIGIT_IMAGES]...  Digit template images to match; must be in sequence, i.e. digit-0 first
+
+Options:
+      --webcam                     Capture counter image from webcam
+      --filename <png-file>        Read counter image from file
+      --expect-count <#>           Number of expected digits in OCR [default: 8]
+      --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
+      --debug-image <DEBUG_IMAGE>  If given, generate a debug image that illustrates the detection details
+  -h, --help                       Print help
+  -V, --version                    Print version
 ```
 
-The digit-images need to be extracted from images of counters before, i.e. single digits the same
-size as they appear in the counter, such as:
+The digit-images need to be extracted from images of counters before, i.e. single digits the same size as they appear in the counter, e.g. looking like:
 
 ![](img/digit-3.png)
 
-Then running the program on
+Then running the program with `--filename` on the image:
 
 ![](img/example-counter.png)
 
-will output the sequence of digits observed, here `17300734`, so it can be used directly
-in scripts for further processing.
+will output the sequence of digits observed including timestamp here `17300734`, so it can be used directly in scripts for further processing.
 
 If there is a plausibility check failing (uneven physical distance of digits
 or not exepected number of digits), then there is an error message on stderr and
 exit code is non-zero (while stdout still outputs whatever digits it could
-read).
+read). Number of digits is provided with `--expect-count`.
+
+If instead of `--filename`, the `--webcam` option is used, the image is fetched
+from the webcam. The `--repeat-sec` option will keep the program running and
+re-capturing new images.
 
 ## Debugging
-If compiled with `--features debug_img`, a `./debug-output.png` image is created
-to illustrate how well each digit scores on each column of the meter image.
+With the `--debug-image` option, an image file is generated to illustrate how
+well each digit scores on each column of the meter image.
 It shows the edge-preprocessed original image, a spark-line of 'matching score'
 for each digit and as final row with the assembled images of the match digits.
 

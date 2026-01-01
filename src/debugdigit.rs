@@ -1,5 +1,3 @@
-#![cfg(feature = "debug_img")]
-
 use crate::{DigitPos, THRESHOLD};
 use image::{GrayImage, Luma};
 

@@ -7,5 +7,9 @@ pkgs.mkShell {
       clippy
       rust-analyzer
       rustfmt
+
+      # Needed for a bindgen dependency in nokhwa
+      rustPlatform.bindgenHook
     ];
+
 }

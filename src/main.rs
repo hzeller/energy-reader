@@ -1,66 +1,66 @@
-use image::{DynamicImage, GrayImage, Luma};
+use clap::Parser;
+use image::GrayImage;
 use std::cmp;
-use std::env;
 use std::process::ExitCode;
+use std::time::{SystemTime,UNIX_EPOCH,Duration};
+use anyhow::Result;
 
 mod cross_correlator;
 use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
 
-#[cfg(feature = "debug_img")]
+mod image_util;
+use image_util::{sobel,load_image_as_grayscale};
+
 mod debugdigit;
+
+mod sources;
+use sources::{FilenameSource,WebCamSource};
 
 pub const THRESHOLD: f32 = 0.6;
 
 // Plausibility checks
 const ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT: f32 = 12.0;
-const EXPECTED_DIGIT_COUNT: usize = 8;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct CliArgs {
+    /// Capture counter image from webcam.
+    #[arg(long)]
+    webcam: bool,
+
+    /// Read counter image from file.
+    #[arg(long, value_name="png-file")]
+    filename: Option<String>,
+
+    /// Number of expected digits in OCR.
+    #[arg(long, value_name="#", default_value="8")]
+    expect_count: u32,
+
+    /// Repeat every these number of seconds (useful with --webcam)
+    #[arg(long, value_name="seconds")]
+    repeat_sec: Option<u64>,
+
+    /// If given, generate a debug image that illustrates the detection details.
+    #[arg(long)]
+    debug_image: Option<String>,
+
+    /// Digit template images to match; must be in sequence, i.e. digit-0 first.
+    digit_images: Vec<String>,
+}
+
+pub struct TimestampedImage {
+    timestamp: SystemTime,
+    image: GrayImage,
+}
+pub trait ImageSource {
+    fn read_image(&self) -> Result<TimestampedImage>;
+}
 
 #[derive(Clone)]
 pub struct DigitPos {
     digit: u32,
     score: f32,
     pos: u32,
-}
-
-fn load_image_as_grayscale(path: &str) -> GrayImage {
-    let rgba = image::open(path).unwrap().into_rgba8();
-    DynamicImage::ImageRgba8(rgba).into_luma8()
-}
-
-// Classic edge detection.
-fn sobel(input: &GrayImage) -> GrayImage {
-    let width: u32 = input.width() - 2;
-    let height: u32 = input.height() - 2;
-    let mut result = GrayImage::new(width, height);
-
-    for x in 0..width {
-        for y in 0..height {
-            let nw = input.get_pixel(x, y)[0] as i32;
-            let north = input.get_pixel(x + 1, y)[0] as i32;
-            let ne = input.get_pixel(x + 2, y)[0] as i32;
-
-            let west = input.get_pixel(x, y + 1)[0] as i32;
-            let east = input.get_pixel(x + 2, y + 1)[0] as i32;
-
-            let sw = input.get_pixel(x, y + 2)[0] as i32;
-            let south = input.get_pixel(x + 1, y + 2)[0] as i32;
-            let se = input.get_pixel(x + 2, y + 2)[0] as i32;
-
-            // Sobel kernel in x and y direction
-            #[rustfmt::skip]
-            let gx = (-nw        + ne
-                +    (-2 * west) + (2 * east)
-                +    -sw         + se) as f32;
-
-            #[rustfmt::skip]
-            let gy = (-nw  + (-2 * north) + -ne
-                +     sw   + ( 2 * south) +  se) as f32;
-
-            let mag = gx.hypot(gy).clamp(0.0, 255.0);
-            result.put_pixel(x, y, Luma([mag as u8]));
-        }
-    }
-    result
 }
 
 // Find the hightest score digits and emit their positions.
@@ -93,10 +93,11 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
     result
 }
 
-fn looks_plausible(locations: &[DigitPos]) -> Result<(), String> {
-    if locations.len() < EXPECTED_DIGIT_COUNT {
-        return Err(format!("Got #{} digits, but expected {}",
-                           locations.len(), EXPECTED_DIGIT_COUNT));
+fn looks_plausible(locations: &[DigitPos],
+                   expect_count: u32) -> Result<(), String> {
+    if locations.len() != expect_count as usize {
+        return Err(format!("Got {} digits, but expected {}",
+                           locations.len(), expect_count));
     }
     const LO_ALLOW: f32 = 1.0 - ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
     const HI_ALLOW: f32 = 1.0 + ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
@@ -114,51 +115,80 @@ fn looks_plausible(locations: &[DigitPos]) -> Result<(), String> {
     Ok(())
 }
 
+fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
+              locations: &[DigitPos]) {
+    write!(out, "{}\t",
+           ts.duration_since(UNIX_EPOCH).unwrap().as_secs()).unwrap();
+    for loc in locations {
+        write!(out, "{}", (loc.digit as u8 + '0' as u8) as char).unwrap();
+    }
+    write!(out, "\n").unwrap();
+}
+
 // Params: energy-reader <counter-image> <digit0> <digit1>...
 fn main() -> ExitCode {
-    // First image is the text containing image, followed by digits.
-    let haystack_file = env::args().nth(1).expect("want metering image.");
-    let haystack = sobel(&load_image_as_grayscale(haystack_file.as_str()));
+    let args = CliArgs::parse();
 
-    let mut max_digit_w = 0u32;
-    let mut max_digit_h = 0u32;
+    let source: Box<dyn ImageSource >= if args.filename.is_some() {
+        Box::new(FilenameSource::new(args.filename.unwrap()))
+    } else if args.webcam {
+        Box::new(WebCamSource{})
+    } else {
+        eprintln!("Need one of --filename or --webcam");
+        return ExitCode::FAILURE;
+    };
+
+    let mut max_digit_w = 0;
+    let mut max_digit_h = 0;
     let mut digits = Vec::new();
-    for digit_picture in env::args().skip(2) {
+    for digit_picture in args.digit_images {
         let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
         max_digit_w = cmp::max(max_digit_w, digit.width());
         max_digit_h = cmp::max(max_digit_h, digit.height());
         digits.push(digit);
     }
 
-    let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);
-    let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
-    for digit in digits.iter() {
-        digit_scores.push(correlator.cross_correlate_with(digit));
+    let mut last_success;
+
+    loop {
+        let captured = &source.read_image().unwrap();
+        let haystack = sobel(&captured.image);
+
+        let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);
+        let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
+        for digit in digits.iter() {
+            digit_scores.push(correlator.cross_correlate_with(digit));
+        }
+
+        let digit_locations = locate_digits(&digit_scores, max_digit_w);
+
+        if args.debug_image.is_some() {
+            let debug_filename = args.debug_image.as_ref().unwrap();
+            debugdigit::debug_print_digits(
+                &haystack,
+                &digits,
+                max_digit_w,
+                max_digit_h,
+                &digit_scores,
+                &digit_locations,
+            )
+                .save(debug_filename)
+                .unwrap();
+        }
+
+        match looks_plausible(&digit_locations, args.expect_count) {
+            Err(e) => { eprintln!("{}", e); last_success=ExitCode::FAILURE; }
+            Ok(_) => {
+                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations);
+                last_success = ExitCode::SUCCESS;
+            }
+        };
+
+        match args.repeat_sec {
+            Some(sec) => { std::thread::sleep(Duration::from_secs(sec)); }
+            None => { break; }
+        };
     }
 
-    // Output to stdout for further processing.
-    let digit_locations = locate_digits(&digit_scores, max_digit_w);
-
-    #[cfg(feature = "debug_img")]
-    debugdigit::debug_print_digits(
-        &haystack,
-        &digits,
-        max_digit_w,
-        max_digit_h,
-        &digit_scores,
-        &digit_locations,
-    )
-    .save("debug-output.png")
-    .unwrap();
-
-    // Independent of plausiblity, always print observed digits.
-    for loc in &digit_locations {
-        print!("{}", loc.digit);
-    }
-    println!();
-
-    match looks_plausible(&digit_locations) {
-        Err(e) => { eprintln!("{}", e); ExitCode::FAILURE }
-        Ok(_) => ExitCode::SUCCESS
-    }
+    last_success
 }
