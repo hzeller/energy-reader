@@ -21,13 +21,14 @@ Arguments:
   [DIGIT_IMAGES]...  Digit template images to match; must be in sequence, i.e. digit-0 first
 
 Options:
-      --webcam                     Capture counter image from webcam
-      --filename <png-file>        Read counter image from file
-      --expect-count <#>           Number of expected digits in OCR [default: 8]
-      --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
-      --debug-image <DEBUG_IMAGE>  If given, generate a debug image that illustrates the detection details
-  -h, --help                       Print help
-  -V, --version                    Print version
+      --webcam                    Capture counter image from webcam
+      --filename <png-file>       Read counter image from file
+      --expect-count <#>          Number of expected digits in OCR [default: 8]
+      --repeat-sec <seconds>      Repeat every these number of seconds (useful with --webcam)
+      --debug-capture <img-file>  Output the image captured
+      --debug-scoring <img-file>  Generate a debug image that illustrates the detection details
+  -h, --help                      Print help
+  -V, --version                   Print version
 ```
 
 The digit-images need to be extracted from images of counters before, i.e. single digits the same size as they appear in the counter, e.g. looking like:
@@ -50,7 +51,10 @@ from the webcam. The `--repeat-sec` option will keep the program running and
 re-capturing new images.
 
 ## Debugging
-With the `--debug-image` option, an image file is generated to illustrate how
+The `--debug-capture` option allows to output the captured image to a file,
+which can be useful to check alignment and the initial init of match digits.
+
+With the `--debug-socring` option, an image file is generated to illustrate how
 well each digit scores on each column of the meter image.
 It shows the edge-preprocessed original image, a spark-line of 'matching score'
 for each digit and as final row with the assembled images of the match digits.

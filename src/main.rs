@@ -40,9 +40,13 @@ struct CliArgs {
     #[arg(long, value_name="seconds")]
     repeat_sec: Option<u64>,
 
-    /// If given, generate a debug image that illustrates the detection details.
-    #[arg(long)]
-    debug_image: Option<String>,
+    /// Output the image captured.
+    #[arg(long, value_name="img-file")]
+    debug_capture: Option<String>,
+
+    /// Generate a debug image that illustrates the detection details.
+    #[arg(long, value_name="img-file")]
+    debug_scoring: Option<String>,
 
     /// Digit template images to match; must be in sequence, i.e. digit-0 first.
     digit_images: Vec<String>,
@@ -152,6 +156,9 @@ fn main() -> ExitCode {
 
     loop {
         let captured = &source.read_image().unwrap();
+        if args.debug_capture.is_some() {
+            captured.image.save(args.debug_capture.as_ref().unwrap()).unwrap();
+        }
         let haystack = sobel(&captured.image);
 
         let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);
@@ -162,8 +169,8 @@ fn main() -> ExitCode {
 
         let digit_locations = locate_digits(&digit_scores, max_digit_w);
 
-        if args.debug_image.is_some() {
-            let debug_filename = args.debug_image.as_ref().unwrap();
+        if args.debug_scoring.is_some() {
+            let debug_filename = args.debug_scoring.as_ref().unwrap();
             debugdigit::debug_print_digits(
                 &haystack,
                 &digits,
