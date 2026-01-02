@@ -124,9 +124,9 @@ fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
     write!(out, "{}\t",
            ts.duration_since(UNIX_EPOCH).unwrap().as_secs()).unwrap();
     for loc in locations {
-        write!(out, "{}", (loc.digit as u8 + '0' as u8) as char).unwrap();
+        write!(out, "{}", (loc.digit as u8 + b'0') as char).unwrap();
     }
-    write!(out, "\n").unwrap();
+    writeln!(out).unwrap();
 }
 
 // Params: energy-reader <counter-image> <digit0> <digit1>...
