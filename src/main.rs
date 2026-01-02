@@ -155,7 +155,13 @@ fn main() -> ExitCode {
     let mut last_success;
 
     loop {
-        let captured = &source.read_image().unwrap();
+        let captured = match source.read_image() {
+            Ok(captured) => captured,
+            Err(e) => {
+                eprintln!("Trouble capturing: {}", e);
+                continue;
+            }
+        };
         if args.debug_capture.is_some() {
             captured.image.save(args.debug_capture.as_ref().unwrap()).unwrap();
         }
