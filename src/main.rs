@@ -159,6 +159,7 @@ fn main() -> ExitCode {
             Ok(captured) => captured,
             Err(e) => {
                 eprintln!("Trouble capturing: {}", e);
+                std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
         };
