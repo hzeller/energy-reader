@@ -21,14 +21,16 @@ Arguments:
   [DIGIT_IMAGES]...  Digit template images to match; must be in sequence, i.e. digit-0 first
 
 Options:
-      --webcam                    Capture counter image from webcam
-      --filename <png-file>       Read counter image from file
-      --expect-count <#>          Number of expected digits in OCR [default: 8]
-      --repeat-sec <seconds>      Repeat every these number of seconds (useful with --webcam)
-      --debug-capture <img-file>  Output the image captured
-      --debug-scoring <img-file>  Generate a debug image that illustrates the detection details
-  -h, --help                      Print help
-  -V, --version                   Print version
+      --webcam                     Capture counter image from webcam
+      --filename <png-file>        Read counter image from file
+      --op <op>                    Image operations to apply (in that sequence) after image is acquired. One of ["rotate90" "rotate180", "crop:<x>:<y>:<w>:<h>"]
+      --expect-count <#>           Number of expected digits in OCR [default: 8]
+      --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
+      --debug-capture <img-file>   Output the image captured
+      --debug-post-ops <img-file>  Output the image after the process ops have been applied
+      --debug-scoring <img-file>   Generate a debug image that illustrates the detection details
+  -h, --help                       Print help
+  -V, --version                    Print version
 ```
 
 The digit-images need to be extracted from images of counters before, i.e. single digits the same size as they appear in the counter, e.g. looking like:
@@ -49,6 +51,13 @@ read). Number of digits is provided with `--expect-count`.
 If instead of `--filename`, the `--webcam` option is used, the image is fetched
 from the webcam. The `--repeat-sec` option will keep the program running and
 re-capturing new images.
+
+Since the image from the webcam probably needs some massaging, there are
+operations that can be applied in sequence before sent to the digit detection.
+`--op rotate180 --op crop:10:30:1280:200`
+Use `--debug-post-ops` to determine if the resulting image is as expected
+(Since you're on a shell, you probaly want to use [timg](https://timg.sh) as
+image viewer).
 
 ## Debugging
 The `--debug-capture` option allows to output the captured image to a file,

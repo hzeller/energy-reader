@@ -9,7 +9,7 @@ mod cross_correlator;
 use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
 
 mod image_util;
-use image_util::{sobel,load_image_as_grayscale};
+use image_util::{sobel,load_image_as_grayscale, apply_ops};
 
 mod debugdigit;
 
@@ -32,6 +32,11 @@ struct CliArgs {
     #[arg(long, value_name="png-file")]
     filename: Option<String>,
 
+    /// Image operations to apply (in that sequence) after image is acquired.
+    /// One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
+    #[arg(long="op", value_name="op")]
+    process_ops: Vec<String>,
+
     /// Number of expected digits in OCR.
     #[arg(long, value_name="#", default_value="8")]
     expect_count: u32,
@@ -43,6 +48,10 @@ struct CliArgs {
     /// Output the image captured.
     #[arg(long, value_name="img-file")]
     debug_capture: Option<String>,
+
+    /// Output the image after the process ops have been applied.
+    #[arg(long, value_name="img-file")]
+    debug_post_ops: Option<String>,
 
     /// Generate a debug image that illustrates the detection details.
     #[arg(long, value_name="img-file")]
@@ -158,7 +167,7 @@ fn main() -> ExitCode {
     let mut last_success;
 
     loop {
-        let captured = match source.read_image() {
+        let mut captured = match source.read_image() {
             Ok(captured) => captured,
             Err(e) => {
                 eprintln!("Trouble capturing: {}", e);
@@ -169,6 +178,14 @@ fn main() -> ExitCode {
         if args.debug_capture.is_some() {
             captured.image.save(args.debug_capture.as_ref().unwrap()).unwrap();
         }
+        if let Err(e) = apply_ops(&mut captured.image, &args.process_ops) {
+            eprintln!("Check your image ops: {e:#}");
+            return ExitCode::FAILURE;
+        }
+        if args.debug_post_ops.is_some() {
+            captured.image.save(args.debug_post_ops.as_ref().unwrap()).unwrap();
+        }
+
         let haystack = sobel(&captured.image);
 
         let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);

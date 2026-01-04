@@ -1,4 +1,6 @@
 use image::{DynamicImage, GrayImage, Luma};
+use anyhow::Result;
+use image::imageops::{rotate90, rotate180, crop};
 
 pub fn load_image_as_grayscale(path: &str) -> GrayImage {
     let rgba = image::open(path).unwrap().into_rgba8();
@@ -39,4 +41,24 @@ pub fn sobel(input: &GrayImage) -> GrayImage {
         }
     }
     result
+}
+
+pub fn apply_ops(image: &mut GrayImage, ops: &[String]) -> Result<()> {
+    for op in ops {
+        let parts: Vec<&str> = op.split(':').collect();
+
+        match parts.as_slice() {
+            ["rotate180"] => *image = rotate180(image),
+            ["rotate90"] => *image = rotate90(image),
+            ["crop", x, y, w, h] => {
+                let x : u32 = x.parse()?;
+                let y : u32 = y.parse()?;
+                let w : u32 = w.parse()?;
+                let h : u32 = h.parse()?;
+                *image = crop(image, x, y, w, h).to_image();
+            }
+            _ => anyhow::bail!("unknown op: {}", op),
+        }
+    }
+    Ok(())
 }
