@@ -1,9 +1,10 @@
+use anyhow::Result;
 use clap::Parser;
 use image::GrayImage;
+use std::path::Path;
 use std::cmp;
 use std::process::ExitCode;
 use std::time::{SystemTime,UNIX_EPOCH,Duration};
-use anyhow::Result;
 
 mod cross_correlator;
 use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
@@ -37,7 +38,7 @@ struct CliArgs {
     #[arg(long="op", value_name="op")]
     process_ops: Vec<String>,
 
-    /// Number of expected digits in OCR.
+    /// Number of at least expected digits in OCR.
     #[arg(long, value_name="#", default_value="8")]
     expect_count: u32,
 
@@ -56,6 +57,10 @@ struct CliArgs {
     /// Generate a debug image that illustrates the detection details.
     #[arg(long, value_name="img-file")]
     debug_scoring: Option<String>,
+
+    /// Directory to store images that could not detect all digits.
+    #[arg(long, value_name="dir")]
+    failed_capture_dir: Option<String>,
 
     /// Digit template images to match; must be in sequence, i.e. digit-0 first.
     digit_images: Vec<String>,
@@ -111,7 +116,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
 
 fn looks_plausible(locations: &[DigitPos],
                    expect_count: u32) -> Result<(), String> {
-    if locations.len() != expect_count as usize {
+    if locations.len() < expect_count as usize {
         return Err(format!("Got {} digits, but expected {}",
                            locations.len(), expect_count));
     }
@@ -144,6 +149,13 @@ fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
 // Params: energy-reader <counter-image> <digit0> <digit1>...
 fn main() -> ExitCode {
     let args = CliArgs::parse();
+
+    if args.failed_capture_dir.is_some()
+        && !Path::new(args.failed_capture_dir.as_ref().unwrap()).is_dir() {
+        eprintln!("'{}' needs to be an existing dir for --failed_capture_dir",
+                  args.failed_capture_dir.as_ref().unwrap());
+        return ExitCode::FAILURE;
+    }
 
     let source: Box<dyn ImageSource >= if args.filename.is_some() {
         Box::new(FilenameSource::new(args.filename.unwrap()))
@@ -211,7 +223,16 @@ fn main() -> ExitCode {
         }
 
         match looks_plausible(&digit_locations, args.expect_count) {
-            Err(e) => { eprintln!("{}", e); last_success=ExitCode::FAILURE; }
+            Err(e) => {
+                eprintln!("{}", e);
+                if args.failed_capture_dir.is_some() {
+                    let filename = format!("{}/fail-{}.png",
+                                           args.failed_capture_dir.as_ref().unwrap(),
+                                           captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs());
+                    captured.image.save(filename).unwrap();
+                }
+                last_success=ExitCode::FAILURE;
+            }
             Ok(_) => {
                 log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations);
                 last_success = ExitCode::SUCCESS;
