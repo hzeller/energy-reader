@@ -52,11 +52,11 @@ pub fn debug_print_digits(
         // Highlight starting from the minimum score this particular digit
         // was ever selected at.
         let highlight_score = digit_positions.iter()
-            .map(|p| if p.digit_pattern as usize == i {
-                p.score
+            .filter_map(|p| if p.digit_pattern as usize == i {
+                Some(p.score)
             } else {
-                1.0
-            }).min_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
+                None
+            }).min_by(|a, b| a.total_cmp(b)).unwrap_or(1.0);
 
         let visualize = graph(&digit_scores[i], highlight_score, sparkline_height);
         image::imageops::overlay(
