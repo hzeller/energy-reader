@@ -124,9 +124,8 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
 
 fn looks_plausible(locations: &[DigitPos],
                    expect_count: u32) -> Result<(), String> {
-    if locations.len() < expect_count as usize {
-        return Err(format!("Got {} digits, but expected {}",
-                           locations.len(), expect_count));
+    if locations.len() < 2 {
+        return Err("Not even two digits".to_string());
     }
     const LO_ALLOW: f32 = 1.0 - ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
     const HI_ALLOW: f32 = 1.0 + ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
@@ -140,6 +139,12 @@ fn looks_plausible(locations: &[DigitPos],
                 last_delta, now_delta, 100.0 * fraction, ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT));
         }
         last_delta = now_delta;
+    }
+    // We do this last, as the above loop might more specifically point out
+    // 'holes'
+    if locations.len() < expect_count as usize {
+        return Err(format!("Got {} digits, but expected {}",
+                           locations.len(), expect_count));
     }
     Ok(())
 }
