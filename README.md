@@ -18,7 +18,7 @@ cargo build --release
 Usage: energy-reader [OPTIONS] [DIGIT_IMAGES]...
 
 Arguments:
-  [DIGIT_IMAGES]...  Digit template images to match; must be in sequence, i.e. digit-0 first
+  [DIGIT_IMAGES]...  Digit template images to match; the first digit found in the filename is the matched digit. Allows to have multiple templates for the same digit if needed (e.g. d1-0.png, d1-1.png)
 
 Options:
       --webcam                     Capture counter image from webcam
@@ -64,7 +64,7 @@ image viewer).
 The `--debug-capture` option allows to output the captured image to a file,
 which can be useful to check alignment and the initial init of match digits.
 
-With the `--debug-socring` option, an image file is generated to illustrate how
+With the `--debug-scoring` option, an image file is generated to illustrate how
 well each digit scores on each column of the meter image.
 It shows the edge-preprocessed original image, a spark-line of 'matching score'
 for each digit and as final row with the assembled images of the match digits.
@@ -72,15 +72,16 @@ for each digit and as final row with the assembled images of the match digits.
 ![](img/example-output.png)
 
 It also outputs a list (to stderr) with one line per matching digit.
-The columns contain the digit, their positions on the x-axis and a score.
+The columns contain the digit, their positions on the x-axis and a score as
+well as the digit filename that matched.
 
 ```
-1   37 0.839
-7  132 0.791
-3  221 0.802
-0  309 0.797
-0  399 0.927
-7  492 0.909
-3  580 0.957
-4  676 0.921
+1   37 0.839 digits/d1-0.png
+7  132 0.791 digits/d7-0.png
+3  221 0.802 digits/d3-1.png
+0  309 0.797 digits/d0-0.png
+0  399 0.927 digits/d0-0.png
+7  492 0.909 digits/d7-0.png
+3  580 0.957 digits/d3-0.png
+4  676 0.921 digits/d4-0.png
 ```

@@ -62,7 +62,9 @@ struct CliArgs {
     #[arg(long, value_name="dir")]
     failed_capture_dir: Option<String>,
 
-    /// Digit template images to match; must be in sequence, i.e. digit-0 first.
+    /// Digit template images to match; the first digit found in the filename
+    /// is the matched digit. Allows to have multiple templates for the same
+    /// digit if needed (e.g. d1-0.png, d1-1.png).
     digit_images: Vec<String>,
 }
 
@@ -76,7 +78,7 @@ pub trait ImageSource {
 
 #[derive(Clone)]
 pub struct DigitPos {
-    digit: u32,
+    digit_pattern: u32,
     score: f32,
     pos: u32,
 }
@@ -87,7 +89,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
     // The shortest score vector is the max x-position we check out
     let x_range = scores.iter().map(|v| v.len()).min().unwrap_or(0) as u32;
     let mut result = Vec::new();
-    let fresh_digit = DigitPos { digit: u32::MAX, score: 0.0, pos: x_range };
+    let fresh_digit = DigitPos { digit_pattern: u32::MAX, score: 0.0, pos: x_range };
     let mut current = fresh_digit.clone();
     // Find highest score that does not change for the width of a digit.
     for x in 0..x_range {
@@ -97,7 +99,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
                 continue;
             }
             if digit_score > current.score {
-                current.digit = i as u32;
+                current.digit_pattern = i as u32;
                 current.score = digit_score;
                 current.pos = x;
             }
@@ -108,7 +110,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
             current = fresh_digit.clone();
         }
     }
-    if current.digit != u32::MAX {
+    if current.digit_pattern != u32::MAX {
         result.push(current);
     }
     result
@@ -137,11 +139,16 @@ fn looks_plausible(locations: &[DigitPos],
 }
 
 fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
-              locations: &[DigitPos]) {
+              locations: &[DigitPos], digit_filenames: &[String]) {
     write!(out, "{}\t",
            ts.duration_since(UNIX_EPOCH).unwrap().as_secs()).unwrap();
     for loc in locations {
-        write!(out, "{}", (loc.digit as u8 + b'0') as char).unwrap();
+        let filename = &digit_filenames[loc.digit_pattern as usize];
+        let first_digit = filename.chars().find(|c| c.is_numeric());
+        match first_digit {
+            Some(digit) => write!(out, "{}", digit).unwrap(),
+            None => {},
+        }
     }
     writeln!(out).unwrap();
 }
@@ -169,7 +176,7 @@ fn main() -> ExitCode {
     let mut max_digit_w = 0;
     let mut max_digit_h = 0;
     let mut digits = Vec::new();
-    for digit_picture in args.digit_images {
+    for digit_picture in &args.digit_images {
         let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
         max_digit_w = cmp::max(max_digit_w, digit.width());
         max_digit_h = cmp::max(max_digit_h, digit.height());
@@ -217,6 +224,7 @@ fn main() -> ExitCode {
                 max_digit_h,
                 &digit_scores,
                 &digit_locations,
+                &args.digit_images
             )
                 .save(debug_filename)
                 .unwrap();
@@ -236,7 +244,7 @@ fn main() -> ExitCode {
                 last_success=ExitCode::FAILURE;
             }
             Ok(_) => {
-                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations);
+                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations, &args.digit_images);
                 last_success = ExitCode::SUCCESS;
             }
         };

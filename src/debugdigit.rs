@@ -27,6 +27,7 @@ pub fn debug_print_digits(
     max_digit_height: u32,
     digit_scores: &[Vec<f32>],
     digit_positions: &[DigitPos],
+    digit_filename: &[String],
 ) -> GrayImage {
     let sparkline_height = (1.5 * max_digit_height as f32) as u32;
 
@@ -59,14 +60,15 @@ pub fn debug_print_digits(
 
     // The final recognized digits.
     for loc in digit_positions {
-        let digit_pic = &digits[loc.digit as usize];
+        let digit_pic = &digits[loc.digit_pattern as usize];
         image::imageops::overlay(
             &mut output,
             digit_pic,
             (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
-        eprintln!("{} {:4} {:.3}", loc.digit, loc.pos, loc.score);
+        eprintln!("{} {:4} {:.3} {}", loc.digit_pattern, loc.pos, loc.score,
+                  digit_filename[loc.digit_pattern as usize]);
     }
 
     output
