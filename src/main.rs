@@ -38,7 +38,13 @@ struct CliArgs {
     #[arg(long="op", value_name="op")]
     process_ops: Vec<String>,
 
-    /// Number of at least expected digits in OCR.
+    /// toggle if the input images should go through edge detection (sobel
+    /// filter).
+    #[arg(long = "sobel", default_value="false")]
+    edge_process: bool,
+
+    /// Minimum number of expected digits in OCR (note that sometimes the last
+    /// digit can not be detected as it scrolls through)
     #[arg(long, value_name="#", default_value="8")]
     expect_count: u32,
 
@@ -177,7 +183,12 @@ fn main() -> ExitCode {
     let mut max_digit_h = 0;
     let mut digits = Vec::new();
     for digit_picture in &args.digit_images {
-        let digit = sobel(&load_image_as_grayscale(digit_picture.as_str()));
+        let digit = load_image_as_grayscale(digit_picture.as_str());
+        let digit = if args.edge_process {
+            sobel(&digit)
+        } else {
+            digit
+        };
         max_digit_w = cmp::max(max_digit_w, digit.width());
         max_digit_h = cmp::max(max_digit_h, digit.height());
         digits.push(digit);
@@ -205,7 +216,12 @@ fn main() -> ExitCode {
             captured.image.save(args.debug_post_ops.as_ref().unwrap()).unwrap();
         }
 
-        let haystack = sobel(&captured.image);
+        let haystack = &captured.image;
+        let haystack = if args.edge_process {
+            &sobel(haystack)
+        } else {
+            haystack
+        };
 
         let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);
         let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
