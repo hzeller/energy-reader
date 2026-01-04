@@ -43,10 +43,10 @@ struct CliArgs {
     #[arg(long = "sobel", default_value="false")]
     edge_process: bool,
 
-    /// Minimum number of expected digits in OCR (note that sometimes the last
-    /// digit can not be detected as it scrolls through)
-    #[arg(long, value_name="#", default_value="8")]
-    expect_count: u32,
+    /// Number of digits to OCR verify and emit. Good to limit if the last
+    /// digit is finicky due to roll-over.
+    #[arg(long, value_name="#", default_value="7")]
+    emit_count: usize,
 
     /// Repeat every these number of seconds (useful with --webcam)
     #[arg(long, value_name="seconds")]
@@ -123,7 +123,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
 }
 
 fn looks_plausible(locations: &[DigitPos],
-                   expect_count: u32) -> Result<(), String> {
+                   expect_count: usize) -> Result<(), String> {
     if locations.len() < 2 {
         return Err("Not even two digits".to_string());
     }
@@ -142,7 +142,7 @@ fn looks_plausible(locations: &[DigitPos],
     }
     // We do this last, as the above loop might more specifically point out
     // 'holes'
-    if locations.len() < expect_count as usize {
+    if locations.len() < expect_count {
         return Err(format!("Got {} digits, but expected {}",
                            locations.len(), expect_count));
     }
@@ -250,7 +250,7 @@ fn main() -> ExitCode {
                 .unwrap();
         }
 
-        match looks_plausible(&digit_locations, args.expect_count) {
+        match looks_plausible(&digit_locations, args.emit_count) {
             Err(e) => {
                 let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
                 eprintln!("{} (at {})", e, ts);
@@ -264,7 +264,7 @@ fn main() -> ExitCode {
                 last_success=ExitCode::FAILURE;
             }
             Ok(_) => {
-                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations, &args.digit_images);
+                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations[0..args.emit_count], &args.digit_images);
                 last_success = ExitCode::SUCCESS;
             }
         };

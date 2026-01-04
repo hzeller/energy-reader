@@ -25,7 +25,7 @@ Options:
       --filename <png-file>        Read counter image from file
       --op <op>                    Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
       --sobel                      Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
-      --expect-count <#>           Minimum number of expected digits in OCR (note that sometimes the last digit can not be detected as it scrolls through) [default: 8]
+      --emit-count <#>             Number of digits to OCR verify and emit. Good to limit if the last digit is finicky due to roll-over [default: 7]
       --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
       --debug-capture <img-file>   Output the image captured
       --debug-post-ops <img-file>  Output the image after the process ops have been applied
