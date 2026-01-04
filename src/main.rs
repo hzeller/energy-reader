@@ -94,6 +94,9 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
             current = fresh_digit.clone();
         }
     }
+    if current.digit != u32::MAX {
+        result.push(current);
+    }
     result
 }
 
