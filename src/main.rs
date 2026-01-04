@@ -38,8 +38,8 @@ struct CliArgs {
     #[arg(long="op", value_name="op")]
     process_ops: Vec<String>,
 
-    /// toggle if the input images should go through edge detection (sobel
-    /// filter).
+    /// Process input images through sobel edge-detect. Can improve accuracy
+    /// with very clean and non-distorted images.
     #[arg(long = "sobel", default_value="false")]
     edge_process: bool,
 

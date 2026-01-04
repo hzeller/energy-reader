@@ -24,7 +24,8 @@ Options:
       --webcam                     Capture counter image from webcam
       --filename <png-file>        Read counter image from file
       --op <op>                    Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
-      --expect-count <#>           Number of at least expected digits in OCR [default: 8]
+      --sobel                      Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
+      --expect-count <#>           Minimum number of expected digits in OCR (note that sometimes the last digit can not be detected as it scrolls through) [default: 8]
       --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
       --debug-capture <img-file>   Output the image captured
       --debug-post-ops <img-file>  Output the image after the process ops have been applied
