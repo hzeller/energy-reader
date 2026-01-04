@@ -224,11 +224,13 @@ fn main() -> ExitCode {
 
         match looks_plausible(&digit_locations, args.expect_count) {
             Err(e) => {
-                eprintln!("{}", e);
+                let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
+                eprintln!("{} (at {}", e, ts);
                 if args.failed_capture_dir.is_some() {
                     let filename = format!("{}/fail-{}.png",
                                            args.failed_capture_dir.as_ref().unwrap(),
-                                           captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs());
+                                           ts
+                                           );
                     captured.image.save(filename).unwrap();
                 }
                 last_success=ExitCode::FAILURE;
