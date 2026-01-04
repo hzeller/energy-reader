@@ -67,8 +67,8 @@ pub fn debug_print_digits(
             (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
-        eprintln!("{} {:4} {:.3} {}", loc.digit_pattern, loc.pos, loc.score,
-                  digit_filename[loc.digit_pattern as usize]);
+        eprintln!("{} {:5} {:.3}", digit_filename[loc.digit_pattern as usize],
+                  loc.pos, loc.score);
     }
 
     output

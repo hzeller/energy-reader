@@ -20,7 +20,7 @@ use sources::{FilenameSource,WebCamSource};
 pub const THRESHOLD: f32 = 0.6;
 
 // Plausibility checks
-const ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT: f32 = 18.0;
+const ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT: f32 = 40.0;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
