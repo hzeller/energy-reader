@@ -151,9 +151,8 @@ fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
     for loc in locations {
         let filename = &digit_filenames[loc.digit_pattern as usize];
         let first_digit = filename.chars().find(|c| c.is_numeric());
-        match first_digit {
-            Some(digit) => write!(out, "{}", digit).unwrap(),
-            None => {},
+        if let Some(digit) = first_digit {
+            write!(out, "{}", digit).unwrap();
         }
     }
     writeln!(out).unwrap();
@@ -223,7 +222,7 @@ fn main() -> ExitCode {
             haystack
         };
 
-        let correlator = CrossCorrelator::new(&haystack, max_digit_w, max_digit_h);
+        let correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
         let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
         for digit in digits.iter() {
             digit_scores.push(correlator.cross_correlate_with(digit));
@@ -234,7 +233,7 @@ fn main() -> ExitCode {
         if args.debug_scoring.is_some() {
             let debug_filename = args.debug_scoring.as_ref().unwrap();
             debugdigit::debug_print_digits(
-                &haystack,
+                haystack,
                 &digits,
                 max_digit_w,
                 max_digit_h,

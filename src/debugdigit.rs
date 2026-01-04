@@ -1,8 +1,8 @@
-use crate::{DigitPos, THRESHOLD};
+use crate::DigitPos;
 use image::{GrayImage, Luma};
 
 // Create a sparkline image of given height.
-fn graph(values: &[f32], height: u32) -> GrayImage {
+fn graph(values: &[f32], highlight: f32, height: u32) -> GrayImage {
     let mut result = GrayImage::new(values.len() as u32, height);
     let white = Luma::<u8>::from([255; 1]);
 
@@ -11,7 +11,7 @@ fn graph(values: &[f32], height: u32) -> GrayImage {
         let img_range = (height - 1) as f32;
         let iy = ((1.0 - value) * img_range) as u32;
         result.put_pixel(ix as u32, iy, white);
-        if value > THRESHOLD {
+        if value >= highlight {
             for y in iy..height {
                 result.put_pixel(ix as u32, y, white);
             }
@@ -36,7 +36,7 @@ pub fn debug_print_digits(
     let height = haystack.height() + (1 + digits.len() as u32) * sparkline_height;
     let mut output = GrayImage::new(width, height);
 
-    // Original as first
+    // Original image as first
     image::imageops::overlay(
         &mut output,
         haystack,
@@ -45,10 +45,20 @@ pub fn debug_print_digits(
     );
     vertical_pos += haystack.height();
 
-    // For each digit its sparkline
+    // Show each digit followed by its sparkline
     for (i, digit) in digits.iter().enumerate() {
         image::imageops::overlay(&mut output, digit, 0, vertical_pos as i64);
-        let visualize = graph(&digit_scores[i], sparkline_height);
+
+        // Highlight starting from the minimum score this particular digit
+        // was ever selected at.
+        let highlight_score = digit_positions.iter()
+            .map(|p| if p.digit_pattern as usize == i {
+                p.score
+            } else {
+                1.0
+            }).min_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
+
+        let visualize = graph(&digit_scores[i], highlight_score, sparkline_height);
         image::imageops::overlay(
             &mut output,
             &visualize,
