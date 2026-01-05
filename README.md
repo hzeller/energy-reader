@@ -94,8 +94,8 @@ values from the counter and write to stdout; timestamp and value.
 
 You can use the awk-script [`plot.awk`](./plot.awk) to postprocess that data
 to adapt the decimal point and calculate some derivation to calculate the
-used kWh, and then use the gnuplot script [`plot.gp`](./plot.gp) to generate
-a graph.
+currently used Kilowatt, and then use the gnuplot
+script [`plot.gp`](./plot.gp) to generate a graph.
 
 ```
 ./plot.awk < reader.log > /tmp/data.log
