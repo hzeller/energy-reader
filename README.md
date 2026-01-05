@@ -86,3 +86,22 @@ well as the digit filename that matched.
 3  580 0.957 digits/d3-0.png
 4  676 0.921 digits/d4-0.png
 ```
+
+## Postprocessing
+
+When running with `--repeat-sec`, the energy reader will regularly read the
+values from the counter and write to stdout; timestamp and value.
+
+You can use the awk-script [`plot.awk`](./plot.awk) to postprocess that data
+to adapt the decimal point and calculate some derivation to calculate the
+used kWh, and then use the gnuplot script [`plot.gp`](./plot.gp) to generate
+a graph.
+
+```
+./plot.awk < reader.log > /tmp/data.log
+./plot.gp
+```
+
+Example:
+
+![](img/sample-graph.png)

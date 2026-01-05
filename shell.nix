@@ -10,6 +10,10 @@ pkgs.mkShell {
 
       # Needed for a bindgen dependency in nokhwa
       rustPlatform.bindgenHook
+
+      # Graphing outputs.
+      gnuplot
+      gawk
     ];
 
 }
