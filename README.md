@@ -102,6 +102,11 @@ a graph.
 ./plot.gp
 ```
 
-Example:
+The gnuplot script will directly draw the graph on the terminal (should be
+sufficiently modern terminal, such as `konsole`, but most can do graphics these
+days); alternatively you can modify the script to output to a PNG.
+
+The following example also shows that it is good to have some light-source for
+the camera to see at night :)
 
 ![](img/sample-graph.png)
