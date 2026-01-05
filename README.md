@@ -39,6 +39,12 @@ The digit-images need to be extracted from images of counters before, i.e. singl
 
 ![](img/digit-3.png)
 
+The first digit that is found in the filename is considered the digit it
+represents. You can have multiple templates for the same digit in case a
+single template is not enough; below in the debugging section you see examples
+with multiple templates (in particular the `1` matched two different shapes,
+but is interpreted as the same digit).
+
 Then running the program with `--filename` on the image:
 
 ![](img/example-counter.png)
@@ -48,22 +54,37 @@ will output the sequence of digits observed including timestamp here `17300734`,
 If there is a plausibility check failing (uneven physical distance of digits
 or not exepected number of digits), then there is an error message on stderr and
 exit code is non-zero (while stdout still outputs whatever digits it could
-read). Number of digits is provided with `--expect-count`.
+read). Number of digits that is to be checked and emitted can be controlled with
+the `--emit-count`.
 
 If instead of `--filename`, the `--webcam` option is used, the image is fetched
-from the webcam. The `--repeat-sec` option will keep the program running and
-re-capturing new images.
+from the webcam.
 
-Since the image from the webcam probably needs some massaging, there are
-operations that can be applied in sequence before sent to the digit detection.
-`--op rotate180 --op crop:10:30:1280:200`
+Since the image from the webcam probably needs some massaging to just extract
+the area with the counter, there are image operations that can be applied
+before sent to the digit detection.
+For instance the following flags `--op rotate180 --op crop:10:30:1280:200`
+will first rotate the image from the webcam by 180 degrees, then crop from
+(x,y) = (10, 30) and the given width and height of 1280, 200.
+
 Use `--debug-post-ops` to determine if the resulting image is as expected
 (Since you're on a shell, you probaly want to use [timg](https://timg.sh) as
 image viewer).
 
+The `--repeat-sec` option will keep the program running and re-capturing new
+images, the typical application when monitoring with a webcam.
+
 ## Debugging
-The `--debug-capture` option allows to output the captured image to a file,
-which can be useful to check alignment and the initial init of match digits.
+
+There are a few debugging options which help while setting up the reader the
+first time
+
+   * `--debug-capture` option allows to output the captured image to a file,
+   * `--debug-post-ops` emits the image _after_ the image process operations.
+   * `--debug-scoring` emits an image with detailed detection information (see below)
+   * `--failed-capture-dir` collects all images that could not be properly OCR'ed.
+
+### Debug Scoring
 
 With the `--debug-scoring` option, an image file is generated to illustrate how
 well each digit scores on each column of the meter image.
@@ -77,14 +98,14 @@ The columns contain the digit, their positions on the x-axis and a score as
 well as the digit filename that matched.
 
 ```
-1   37 0.839 digits/d1-0.png
-7  132 0.791 digits/d7-0.png
-3  221 0.802 digits/d3-1.png
-0  309 0.797 digits/d0-0.png
-0  399 0.927 digits/d0-0.png
-7  492 0.909 digits/d7-0.png
-3  580 0.957 digits/d3-0.png
-4  676 0.921 digits/d4-0.png
+digits/d1-1.png    69 0.960
+digits/d7-2.png   230 0.975
+digits/d5-1.png   385 0.941
+digits/d7-2.png   536 0.944
+digits/d3-0.png   688 0.975
+digits/d2-0.png   838 0.970
+digits/d1-0.png  1003 0.978
+digits/d3-0.png  1164 0.877
 ```
 
 ## Postprocessing
