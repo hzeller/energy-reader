@@ -53,6 +53,11 @@ struct CliArgs {
     #[arg(long, value_name="#", default_value="7")]
     emit_count: usize,
 
+    /// Maximum plausible value change per second to avoid logging bogus
+    /// values.
+    #[arg(long, default_value="0.1")]
+    max_plausible_rate: f32,
+
     /// Repeat every these number of seconds (useful with --webcam)
     #[arg(long, value_name="seconds")]
     repeat_sec: Option<u64>,
@@ -158,14 +163,15 @@ fn verify_looks_plausible(locations: &[DigitPos],
 fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
                   expect_count: usize) -> Result<u64> {
     verify_looks_plausible(locations, expect_count)?;
-    locations.iter().take(expect_count).try_fold(0, |acc, loc| {
-        let filename = &digit_filenames[loc.digit_template as usize];
-        let digit = filename.chars()
+    let get_first_digit_from = |f: &String| -> Result<u64> {
+        Ok(f.chars()
             .find(|c| c.is_ascii_digit())
             .and_then(|c| c.to_digit(10))
-            .ok_or_else(|| anyhow!("Filename {:?} must contain a digit", filename))? as u64;
-
-        Ok(acc * 10 + digit)
+            .ok_or_else(|| anyhow!("Filename {:?} must contain a digit", f))? as u64)
+    };
+    locations.iter().take(expect_count).try_fold(0, |acc, loc| {
+        let filename = &digit_filenames[loc.digit_template as usize];
+        Ok(acc * 10 + get_first_digit_from(filename)?)
     })
 }
 
@@ -195,7 +201,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let logger = StdOutSink{};
+    let mut logger = StdOutSink::new(args.max_plausible_rate);
 
     let mut digits = Vec::new();
     for digit_picture in &args.digit_images {
