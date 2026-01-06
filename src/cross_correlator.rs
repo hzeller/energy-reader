@@ -4,7 +4,7 @@ use image::GrayImage;
 pub type ColumnFeatureScore = Vec<f32>;
 
 struct ImageFFT {
-    data: Vec<Complex<f32>>,  // should be renamed
+    freq_domain: Vec<Complex<f32>>,  // should be renamed
     width: u32,
     height: u32,
 }
@@ -21,7 +21,7 @@ impl ImageFFT {
         }
         fft_2d(&mut fft, padded_w, padded_h, planner, FftDirection::Forward);
         Self {
-            data: fft,
+            freq_domain: fft,
             width: image.width(),
             height: image.height(),
         }
@@ -89,13 +89,15 @@ impl CrossCorrelator {
                                          &mut self.planner);
         let haystack_integral = IntegralImages::new(haystack);
         let (w, h) = (self.padded_width, self.padded_height);
-        let mut result = Vec::new();
-        for needle in  &self.needles {
-            let mut n_fft = needle.fft.data.clone();
-            for (n_val, h_val) in n_fft.iter_mut().zip(&haystack_fft.data) {
-                *n_val = h_val * n_val.conj();
+
+        let mut results = Vec::with_capacity(self.needles.len());
+        let mut workspace = vec![Complex::default(); w * h];
+
+        for needle in &self.needles {
+            for (i, out) in workspace.iter_mut().enumerate() {
+                *out = haystack_fft.freq_domain[i] * needle.fft.freq_domain[i].conj();
             }
-            fft_2d(&mut n_fft, w, h, &mut self.planner, FftDirection::Inverse);
+            fft_2d(&mut workspace, w, h, &mut self.planner, FftDirection::Inverse);
 
             let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
             let fft_norm = (w * h) as f32;
@@ -106,20 +108,20 @@ impl CrossCorrelator {
                     // Find max score in this column
                     (0..(haystack_fft.height - needle.fft.height) as usize)
                         .map(|y| {
-                            let numerator = n_fft[y * w + x].re / fft_norm;
+                            let numerator = workspace[y * w + x].re / fft_norm;
                             let (sum, sum_sq) = haystack_integral.get_window_stats(x, y, nw, nh);
 
                             let h_var = (sum_sq - (sum * sum) / needle.pixel_count).max(0.0);
                             let denom = needle.std_dev * h_var.sqrt();
 
-                            if denom > 1e-6 { numerator / denom } else { 0.0 }
+                            if denom > 1e-6 { (numerator / denom).clamp(-1.0, 1.0) } else { 0.0 }
                         })
                         .fold(0.0f32, |max, score| max.max(score)) // find the max in this column.
                 })
                 .collect();
-            result.push(score);
+            results.push(score);
         }
-        result
+        results
     }
 }
 
