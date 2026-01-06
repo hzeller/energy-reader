@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{Result, Context, anyhow};
 use clap::Parser;
 use std::cmp;
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{UNIX_EPOCH, Duration};
 
@@ -37,7 +37,7 @@ struct CliArgs {
 
     /// Read counter image from file.
     #[arg(long, value_name="png-file")]
-    filename: Option<String>,
+    filename: Option<PathBuf>,
 
     /// Image operations to apply (in that sequence) after image is acquired.
     /// One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
@@ -60,19 +60,19 @@ struct CliArgs {
 
     /// Output the image captured.
     #[arg(long, value_name="img-file")]
-    debug_capture: Option<String>,
+    debug_capture: Option<PathBuf>,
 
     /// Output the image after the process ops have been applied.
     #[arg(long, value_name="img-file")]
-    debug_post_ops: Option<String>,
+    debug_post_ops: Option<PathBuf>,
 
     /// Generate a debug image that illustrates the detection details.
     #[arg(long, value_name="img-file")]
-    debug_scoring: Option<String>,
+    debug_scoring: Option<PathBuf>,
 
     /// Directory to store images that could not detect all digits.
     #[arg(long, value_name="dir")]
-    failed_capture_dir: Option<String>,
+    failed_capture_dir: Option<PathBuf>,
 
     /// Digit template images to match; the first digit found in the filename
     /// is the matched digit. Allows to have multiple templates for the same
@@ -102,22 +102,20 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32) -> Vec<DigitPo
             .filter(|&(_, score)| score >= THRESHOLD)
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        if let Some((template_idx, score)) = best_at_x {
-            if current_best.as_ref().map_or(true, |c| score > c.score) {
+        if let Some((template_idx, score)) = best_at_x
+            && current_best.as_ref().is_none_or(|c| score > c.score) {
                 current_best = Some(DigitPos {
                     digit_template: template_idx as u32,
                     score,
                     pos: x,
                 });
             }
-        }
 
         // Check if we've passed the width of the current best digit
-        if let Some(best) = &current_best {
-            if x >= best.pos + digit_width {
+        if let Some(best) = &current_best
+            && x >= best.pos + digit_width {
                 result.push(best.clone());
                 current_best = None;
-            }
         }
     }
 
@@ -126,9 +124,9 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32) -> Vec<DigitPo
 }
 
 fn verify_looks_plausible(locations: &[DigitPos],
-                          expect_count: usize) -> Result<(), String> {
+                          expect_count: usize) -> Result<()> {
     if locations.len() < 2 {
-        return Err("Not even two digits".to_string());
+        return Err(anyhow!("Not even two digits"));
     }
     const LO_ALLOW: f32 = 1.0 - ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
     const HI_ALLOW: f32 = 1.0 + ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT / 100.0;
@@ -137,7 +135,7 @@ fn verify_looks_plausible(locations: &[DigitPos],
         let now_delta = (locations[i].pos - locations[i-1].pos) as f32;
         let fraction = now_delta / last_delta;
         if !(LO_ALLOW ..= HI_ALLOW).contains(&fraction) {
-            return Err(format!(
+            return Err(anyhow!(
                 "Digit distance before {:.0}, now {:.0} ({:.1}%) is more than expected ±{}% off.",
                 last_delta, now_delta, 100.0 * fraction, ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT));
         }
@@ -146,7 +144,7 @@ fn verify_looks_plausible(locations: &[DigitPos],
     // We do this last, as the above loop might more specifically point out
     // 'holes'
     if locations.len() < expect_count {
-        return Err(format!("Got {} digits, but expected {}",
+        return Err(anyhow!("Got {} digits, but expected {}",
                            locations.len(), expect_count));
     }
     Ok(())
@@ -154,14 +152,15 @@ fn verify_looks_plausible(locations: &[DigitPos],
 
 fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
                   expect_count: usize)
-                  -> anyhow::Result<u64, String> {
+                  -> anyhow::Result<u64> {
     verify_looks_plausible(locations, expect_count)?;
     locations.iter().take(expect_count).try_fold(0, |acc, loc| {
         let filename = &digit_filenames[loc.digit_template as usize];
-        let digit_char = filename.chars().find(|c| c.is_ascii_digit())
-            .ok_or("Digit filename needs to contain the digit it represents")?;
+        let digit = filename.chars()
+            .find(|c| c.is_ascii_digit())
+            .and_then(|c| c.to_digit(10))
+            .ok_or_else(|| anyhow!("Filename {:?} must contain a digit", filename))? as u64;
 
-        let digit = digit_char.to_digit(10).unwrap() as u64;
         Ok(acc * 10 + digit)
     })
 }
@@ -170,12 +169,11 @@ fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
 fn main() -> ExitCode {
     let args = CliArgs::parse();
 
-    if let Some(ref failed_capture_dir) = args.failed_capture_dir {
-        if !Path::new(failed_capture_dir).is_dir() {
-            eprintln!("'{}' needs to be an existing dir for --failed_capture_dir",
-                      args.failed_capture_dir.as_ref().unwrap());
+    if let Some(ref failed_capture_dir) = args.failed_capture_dir
+        && !failed_capture_dir.is_dir() {
+            eprintln!("'{:?}' needs to be an existing dir for --failed_capture_dir",
+                      failed_capture_dir);
             return ExitCode::FAILURE;
-        }
     }
 
     let source: Box<dyn ImageSource> = if let Some(file) = args.filename {
@@ -204,26 +202,24 @@ fn main() -> ExitCode {
         digits.push(digit);
     }
 
-    let mut last_success;
-
     loop {
         let mut captured = match source.read_image() {
-            Ok(captured) => captured,
+            Ok(c) => c,
             Err(e) => {
                 eprintln!("Trouble capturing: {}", e);
                 std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
         };
-        if let Some(ref debug_capture) = args.debug_capture {
-            captured.image.save(debug_capture).unwrap();
+        if let Some(ref capture_file) = args.debug_capture {
+            let _ = captured.image.save(capture_file).context("failed to save debug capture");
         }
         if let Err(e) = apply_ops(&mut captured.image, &args.process_ops) {
             eprintln!("Check your image ops: {e:#}");
             return ExitCode::FAILURE;
         }
         if let Some(ref post_op_file) = args.debug_post_ops {
-            captured.image.save(post_op_file).unwrap();
+            let _ = captured.image.save(post_op_file).context("failed to save post-op");
         }
 
         let haystack = &captured.image;
@@ -234,10 +230,10 @@ fn main() -> ExitCode {
         };
 
         let correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
-        let mut digit_scores: Vec<ColumnFeatureScore> = Vec::new();
-        for digit in digits.iter() {
-            digit_scores.push(correlator.cross_correlate_with(digit));
-        }
+
+        let digit_scores: Vec<_> = digits.iter()
+            .map(|d| correlator.cross_correlate_with(d))
+            .collect();
 
         let digit_locations = locate_digits(&digit_scores, max_digit_w);
 
@@ -255,32 +251,26 @@ fn main() -> ExitCode {
                 .unwrap();
         }
 
-        match extract_number(&digit_locations,
-                             &args.digit_images,
-                             args.emit_count) {
-            Err(e) => {
-                logger.log_error(captured.timestamp, e);
-                if let Some(ref capture_dir) = args.failed_capture_dir {
-                    let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
-                    let filename = format!("{}/fail-{}.png",
-                                           capture_dir,
-                                           ts,
-                    );
-                    captured.image.save(filename).unwrap();
-                }
-                last_success=ExitCode::FAILURE;
-            }
+        let result = extract_number(&digit_locations, &args.digit_images, args.emit_count);
+        let current_exit_code = match result {
             Ok(meter_value) => {
                 logger.log_value(captured.timestamp, meter_value);
-                last_success = ExitCode::SUCCESS;
+                ExitCode::SUCCESS
+            }
+
+            Err(e) => {
+                logger.log_error(captured.timestamp, e.to_string());
+                if let Some(ref dir) = args.failed_capture_dir {
+                    let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
+                    let _ = captured.image.save(dir.join(format!("fail-{}.png", ts)));
+                }
+                ExitCode::FAILURE
             }
         };
 
         match args.repeat_sec {
             Some(sec) => { std::thread::sleep(Duration::from_secs(sec)); }
-            None => { break; }
+            None => { break current_exit_code },
         };
     }
-
-    last_success
 }

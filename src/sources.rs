@@ -1,6 +1,6 @@
 use image::GrayImage;
 use crate::image_util::load_image_as_grayscale;
-
+use std::path::PathBuf;
 use std::time::SystemTime;
 use anyhow::Result;
 use nokhwa::Camera;
@@ -18,10 +18,10 @@ pub trait ImageSource {
 }
 
 pub struct FilenameSource {
-    filename: String
+    filename: PathBuf
 }
 impl FilenameSource {
-    pub fn new(filename: String) -> FilenameSource {
+    pub fn new(filename: PathBuf) -> FilenameSource {
         FilenameSource{filename}
     }
 }
@@ -31,7 +31,7 @@ impl ImageSource for FilenameSource {
         let time = std::fs::metadata(&self.filename)?.created()?;
         let result = TimestampedImage {
             timestamp: time,
-            image: load_image_as_grayscale(&self.filename),
+            image: load_image_as_grayscale(&self.filename.to_string_lossy()),
         };
         Ok(result)
     }
