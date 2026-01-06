@@ -4,7 +4,7 @@ use image::GrayImage;
 pub type ColumnFeatureScore = Vec<f32>;
 
 struct ImageFFT {
-    freq_domain: Vec<Complex<f32>>,  // should be renamed
+    freq_domain: Vec<Complex<f32>>,
     width: u32,
     height: u32,
 }
