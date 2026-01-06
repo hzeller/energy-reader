@@ -167,15 +167,16 @@ fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
 fn main() -> ExitCode {
     let args = CliArgs::parse();
 
-    if args.failed_capture_dir.is_some()
-        && !Path::new(args.failed_capture_dir.as_ref().unwrap()).is_dir() {
-        eprintln!("'{}' needs to be an existing dir for --failed_capture_dir",
-                  args.failed_capture_dir.as_ref().unwrap());
-        return ExitCode::FAILURE;
+    if let Some(ref failed_capture_dir) = args.failed_capture_dir {
+        if !Path::new(failed_capture_dir).is_dir() {
+            eprintln!("'{}' needs to be an existing dir for --failed_capture_dir",
+                      args.failed_capture_dir.as_ref().unwrap());
+            return ExitCode::FAILURE;
+        }
     }
 
-    let source: Box<dyn ImageSource >= if args.filename.is_some() {
-        Box::new(FilenameSource::new(args.filename.unwrap()))
+    let source: Box<dyn ImageSource> = if let Some(file) = args.filename {
+        Box::new(FilenameSource::new(file))
     } else if args.webcam {
         Box::new(WebCamSource{})
     } else {
@@ -211,15 +212,15 @@ fn main() -> ExitCode {
                 continue;
             }
         };
-        if args.debug_capture.is_some() {
-            captured.image.save(args.debug_capture.as_ref().unwrap()).unwrap();
+        if let Some(ref debug_capture) = args.debug_capture {
+            captured.image.save(debug_capture).unwrap();
         }
         if let Err(e) = apply_ops(&mut captured.image, &args.process_ops) {
             eprintln!("Check your image ops: {e:#}");
             return ExitCode::FAILURE;
         }
-        if args.debug_post_ops.is_some() {
-            captured.image.save(args.debug_post_ops.as_ref().unwrap()).unwrap();
+        if let Some(ref post_op_file) = args.debug_post_ops {
+            captured.image.save(post_op_file).unwrap();
         }
 
         let haystack = &captured.image;
@@ -237,8 +238,7 @@ fn main() -> ExitCode {
 
         let digit_locations = locate_digits(&digit_scores, max_digit_w);
 
-        if args.debug_scoring.is_some() {
-            let debug_filename = args.debug_scoring.as_ref().unwrap();
+        if let Some(ref debug_scoring) = args.debug_scoring {
             debugdigit::debug_print_digits(
                 haystack,
                 &digits,
@@ -248,7 +248,7 @@ fn main() -> ExitCode {
                 &digit_locations,
                 &args.digit_images
             )
-                .save(debug_filename)
+                .save(debug_scoring)
                 .unwrap();
         }
 
@@ -257,10 +257,10 @@ fn main() -> ExitCode {
                              args.emit_count) {
             Err(e) => {
                 logger.log_error(captured.timestamp, e);
-                if args.failed_capture_dir.is_some() {
+                if let Some(ref capture_dir) = args.failed_capture_dir {
                     let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
                     let filename = format!("{}/fail-{}.png",
-                                           args.failed_capture_dir.as_ref().unwrap(),
+                                           capture_dir,
                                            ts,
                     );
                     captured.image.save(filename).unwrap();
