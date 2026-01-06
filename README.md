@@ -21,18 +21,18 @@ Arguments:
   [DIGIT_IMAGES]...  Digit template images to match; the first digit found in the filename is the matched digit. Allows to have multiple templates for the same digit if needed (e.g. d1-0.png, d1-1.png)
 
 Options:
-      --webcam                     Capture counter image from webcam
-      --filename <png-file>        Read counter image from file
-      --op <op>                    Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
-      --sobel                      Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
-      --emit-count <#>             Number of digits to OCR verify and emit. Good to limit if the last digit is finicky due to roll-over [default: 7]
-      --repeat-sec <seconds>       Repeat every these number of seconds (useful with --webcam)
-      --debug-capture <img-file>   Output the image captured
-      --debug-post-ops <img-file>  Output the image after the process ops have been applied
-      --debug-scoring <img-file>   Generate a debug image that illustrates the detection details
-      --failed-capture-dir <dir>   Directory to store images that could not detect all digits
-  -h, --help                       Print help
-  -V, --version                    Print version
+      --webcam                       Capture counter image from webcam
+      --filename <png-file>          Read counter image from file
+      --op <op>                      Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
+      --sobel                        Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
+      --emit-count <#>               Number of digits to OCR verify and emit. Good to limit if the last digit is finicky due to roll-over [default: 7]
+      --repeat-sec <seconds>         Repeat every these number of seconds (useful with --webcam)
+      --debug-capture <file-or-dir>  Output the image captured. If this is a pre-existing directory, writes snap-<timestemp>.png images, otherwise it is intepreted as filename
+      --debug-post-ops <img-file>    Output the image after the process ops have been applied
+      --debug-scoring <img-file>     Generate a debug image that illustrates the detection details
+      --failed-capture-dir <dir>     Directory to store images that could not detect all digits
+  -h, --help                         Print help
+  -V, --version                      Print version
 ```
 
 The digit-images need to be extracted from images of counters before, i.e. single digits the same size as they appear in the counter, e.g. looking like:

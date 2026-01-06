@@ -57,8 +57,9 @@ struct CliArgs {
     #[arg(long, value_name="seconds")]
     repeat_sec: Option<u64>,
 
-    /// Output the image captured.
-    #[arg(long, value_name="img-file")]
+    /// Output the image captured. If this is a pre-existing directory, writes
+    /// snap-<timestemp>.png images, otherwise it is intepreted as filename.
+    #[arg(long, value_name="file-or-dir")]
     debug_capture: Option<PathBuf>,
 
     /// Output the image after the process ops have been applied.
@@ -207,9 +208,17 @@ fn main() -> ExitCode {
                 continue;
             }
         };
+        let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
+
         if let Some(ref capture_file) = args.debug_capture {
-            let _ = captured.image.save(capture_file).context("failed to save debug capture");
+            let img_file = if capture_file.is_dir() {
+                &capture_file.join(format!("snap-{}.png", ts))
+            } else {
+                capture_file
+            };
+            let _ = captured.image.save(img_file).context("failed to save debug capture");
         }
+
         if let Err(e) = apply_ops(&mut captured.image, &args.process_ops) {
             eprintln!("Check your image ops: {e:#}");
             return ExitCode::FAILURE;
@@ -256,7 +265,6 @@ fn main() -> ExitCode {
             Err(e) => {
                 logger.log_error(captured.timestamp, &e.to_string());
                 if let Some(ref dir) = args.failed_capture_dir {
-                    let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
                     let _ = captured.image.save(dir.join(format!("fail-{}.png", ts)));
                 }
                 ExitCode::FAILURE
