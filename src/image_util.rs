@@ -1,42 +1,35 @@
-use image::{DynamicImage, GrayImage, Luma};
-use anyhow::Result;
+use image::{GrayImage, Luma};
+use anyhow::{Result, Context, anyhow};
 use image::imageops::{rotate90, rotate180, crop};
 
 pub fn load_image_as_grayscale(path: &str) -> GrayImage {
-    let rgba = image::open(path).unwrap().into_rgba8();
-    DynamicImage::ImageRgba8(rgba).into_luma8()
+    image::open(path)
+        .expect("Failed to open image")
+        .into_luma8()
 }
 
 // Classic edge detection.
 pub fn sobel(input: &GrayImage) -> GrayImage {
-    let width: u32 = input.width() - 2;
-    let height: u32 = input.height() - 2;
-    let mut result = GrayImage::new(width, height);
+    let (width, height) = (input.width(), input.height());
+    if width < 3 || height < 3 { return input.clone(); }
 
-    for x in 0..width {
-        for y in 0..height {
-            let nw = input.get_pixel(x, y)[0] as i32;
-            let north = input.get_pixel(x + 1, y)[0] as i32;
-            let ne = input.get_pixel(x + 2, y)[0] as i32;
+    let (out_w, out_h) = (width - 2, height - 2);
+    let mut result = GrayImage::new(out_w, out_h);
 
-            let west = input.get_pixel(x, y + 1)[0] as i32;
-            let east = input.get_pixel(x + 2, y + 1)[0] as i32;
+    for y in 0..out_h {
+        for x in 0..out_w {
+            // direct relative indexing.
+            let p = |dx: u32, dy: u32| input[(x + dx, y + dy)][0] as i32;
 
-            let sw = input.get_pixel(x, y + 2)[0] as i32;
-            let south = input.get_pixel(x + 1, y + 2)[0] as i32;
-            let se = input.get_pixel(x + 2, y + 2)[0] as i32;
+            let (nw,   north,   ne) = (p(0, 0), p(1, 0), p(2, 0));
+            let (west,        east) = (p(0, 1), p(2, 1));
+            let (sw,   south,   se) = (p(0, 2), p(1, 2), p(2, 2));
 
             // Sobel kernel in x and y direction
-            #[rustfmt::skip]
-            let gx = (-nw        + ne
-                +    (-2 * west) + (2 * east)
-                +    -sw         + se) as f32;
+            let gx = (ne - nw) + 2 * (east - west)   + (se - sw);
+            let gy = (sw - nw) + 2 * (south - north) + (se - ne);
 
-            #[rustfmt::skip]
-            let gy = (-nw  + (-2 * north) + -ne
-                +     sw   + ( 2 * south) +  se) as f32;
-
-            let mag = gx.hypot(gy).clamp(0.0, 255.0);
+            let mag = ((gx * gx + gy * gy) as f32).sqrt().min(255.0);
             result.put_pixel(x, y, Luma([mag as u8]));
         }
     }
@@ -51,13 +44,16 @@ pub fn apply_ops(image: &mut GrayImage, ops: &[String]) -> Result<()> {
             ["rotate180"] => *image = rotate180(image),
             ["rotate90"] => *image = rotate90(image),
             ["crop", x, y, w, h] => {
-                let x : u32 = x.parse()?;
-                let y : u32 = y.parse()?;
-                let w : u32 = w.parse()?;
-                let h : u32 = h.parse()?;
+                let x : u32 = x.parse().context("Invalid x")?;
+                let y : u32 = y.parse().context("Invalid y")?;
+                let w : u32 = w.parse().context("Invalid width")?;
+                let h : u32 = h.parse().context("Invalid height")?;
+                if x + w > image.width() || y + h > image.height() {
+                    return Err(anyhow!("Crop dimensions out of image bounds"));
+                }
                 *image = crop(image, x, y, w, h).to_image();
             }
-            _ => anyhow::bail!("unknown op: {}", op),
+            _ => anyhow::bail!("unknown or malformed op: {}", op),
         }
     }
     Ok(())
