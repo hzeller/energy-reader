@@ -9,6 +9,8 @@ pub struct CrossCorrelator<'a> {
     fft_height: usize,
     haystack_fft: Vec<Complex<f32>>,
     haystack_integral: IntegralImages,
+
+    planner: FftPlanner<f32>,  // Caches decisions
 }
 
 // Use FFT and the integral image to produce a normalized cross correlation.
@@ -21,18 +23,15 @@ impl<'a> CrossCorrelator<'a> {
         let haystack_integral = IntegralImages::new(haystack);
         let fft_width = (haystack.width() + max_needle_width) as usize;
         let fft_height = (haystack.height() + max_needle_height) as usize;
-        let mut haystack_fft = vec![Complex::new(0.0, 0.0); fft_width * fft_height];
-        haystack_fft
-            .chunks_exact_mut(fft_width)
-            .zip(haystack.rows())
-            .for_each(|(padded_row, image_row)| {
-                padded_row
-                    .iter_mut()
-                    .zip(image_row)
-                    .for_each(|(target, pixel)| {
-                        *target = Complex::new(pixel[0] as f32, 0.0);
-                    });
-            });
+
+        let mut haystack_fft = vec![Complex::default(); fft_width * fft_height];
+        for (y, row) in haystack.rows().enumerate() {
+            let offset = y * fft_width;
+            for (x, pixel) in row.enumerate() {
+                haystack_fft[offset + x] = Complex::new(pixel[0] as f32, 0.0);
+            }
+        }
+
         let mut planner = FftPlanner::new();
         fft_2d(&mut haystack_fft, fft_width, fft_height, &mut planner, FftDirection::Forward);
 
@@ -42,40 +41,34 @@ impl<'a> CrossCorrelator<'a> {
             fft_height,
             haystack_fft,
             haystack_integral,
+            planner,
         }
     }
 
     // Cross correlate the haystack with "needle" and provide a needls score
     // over the length of the haystack.
-    pub fn cross_correlate_with(&self, needle: &GrayImage)
+    pub fn cross_correlate_with(&mut self, needle: &GrayImage)
                                 -> ColumnFeatureScore {
         let n_pixels = (needle.width() * needle.height()) as f32;
         let n_sum: f32 = needle.iter().map(|&p| p as f32).sum();
         let n_avg = n_sum / n_pixels;
 
         let (w, h) = (self.fft_width, self.fft_height);
-        let mut n_space = vec![Complex::new(0.0, 0.0); w * h];
-        n_space
-            .chunks_exact_mut(self.fft_width)
-            .zip(needle.rows())
-            .for_each(|(padded_row, image_row)| {
-                padded_row
-                    .iter_mut()
-                    .zip(image_row)
-                    .for_each(|(target, pixel)| {
-                        *target = Complex::new(pixel[0] as f32 - n_avg, 0.0);
-                    });
-            });
+        let mut n_space = vec![Complex::default(); w * h];
+        for (y, row) in needle.rows().enumerate() {
+            let offset = y * self.fft_width;
+            for (x, pixel) in row.enumerate() {
+                n_space[offset + x] = Complex::new(pixel[0] as f32 - n_avg, 0.0);
+            }
+        }
 
         // Don't touch preprocessed haystack_fft, do all modifications in local n_space
-        let mut planner = FftPlanner::new();
-        fft_2d(&mut n_space, w, h, &mut planner, FftDirection::Forward);
-        n_space.iter_mut().zip(self.haystack_fft.iter()).for_each(|(n, h)| {
-            *n = h * n.conj();
-        });
-        fft_2d(&mut n_space, w, h, &mut planner, FftDirection::Inverse);
+        fft_2d(&mut n_space, w, h, &mut self.planner, FftDirection::Forward);
+        for (n_val, h_val) in n_space.iter_mut().zip(&self.haystack_fft) {
+            *n_val = h_val * n_val.conj();
+        }
+        fft_2d(&mut n_space, w, h, &mut self.planner, FftDirection::Inverse);
 
-        let (nw, nh) = (needle.width() as usize, needle.height() as usize);
 
         // Prepare needle variance for normalized cross correlation
         let n_sq_diff_sum: f32 = needle
@@ -86,8 +79,9 @@ impl<'a> CrossCorrelator<'a> {
             })
             .sum();
         let n_std_dev = n_sq_diff_sum.sqrt();
-
+        let (nw, nh) = (needle.width() as usize, needle.height() as usize);
         let fft_norm = (w * h) as f32;
+
         (0..(self.haystack.width() - needle.width()))
             .map(|x| {
                 let x = x as usize;
@@ -165,21 +159,21 @@ impl IntegralImages {
 
 fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
           planner: &mut FftPlanner<f32>, direction: FftDirection) {
-    // Rows: process each chunk directly
     let fft_row = planner.plan_fft(width, direction);
-    data.chunks_exact_mut(width).for_each(|row| {
-        fft_row.process(row);
-    });
+    data.chunks_exact_mut(width).for_each(|row| fft_row.process(row));
 
-    // Extract columns, then operate on these
     let fft_col = planner.plan_fft(height, direction);
+    let mut column = vec![Complex::default(); height];
     for x in 0..width {
-        let mut column: Vec<_> = (0..height).map(|y| data[y * width + x]).collect();
+        // slice through data and extract the column.
+        for y in 0..height {
+            column[y] = data[y * width + x];
+        }
 
         fft_col.process(&mut column);
 
-        column.into_iter().enumerate().for_each(|(y, val)| {
-            data[y * width + x] = val;
-        });
+        for y in 0..height {
+            data[y * width + x] = column[y];
+        }
     }
 }

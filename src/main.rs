@@ -224,7 +224,7 @@ fn main() -> ExitCode {
             &captured.image
         };
 
-        let correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
+        let mut correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
 
         let digit_scores: Vec<_> = digits.iter()
             .map(|d| correlator.cross_correlate_with(d))
