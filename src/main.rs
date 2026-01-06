@@ -156,15 +156,14 @@ fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
                   expect_count: usize)
                   -> anyhow::Result<u64, String> {
     verify_looks_plausible(locations, expect_count)?;
-    let mut result: u64 = 0;
-    for loc in &locations[0..expect_count] {
+    locations.iter().take(expect_count).try_fold(0, |acc, loc| {
         let filename = &digit_filenames[loc.digit_template as usize];
-        let first_digit = filename.chars().find(|c| c.is_ascii_digit())
+        let digit_char = filename.chars().find(|c| c.is_ascii_digit())
             .ok_or("Digit filename needs to contain the digit it represents")?;
-        let c = (first_digit as u8 - b'0') as u64;
-        result = 10 * result + c;
-    }
-    Ok(result)
+
+        let digit = digit_char.to_digit(10).unwrap() as u64;
+        Ok(acc * 10 + digit)
+    })
 }
 
 // Params: energy-reader <counter-image> <digit0> <digit1>...
