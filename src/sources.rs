@@ -48,6 +48,9 @@ impl ImageSource for WebCamSource {
             .context("could not find/access webcam")?;
         camera.open_stream().context("failed to open stream")?;
 
+        for _ in 0..5 {
+            let _ = camera.frame();  // Let camera adjust brightness
+        }
         let frame = camera.frame().context("Could not capture image")?;
         let timestamp = SystemTime::now();
         let image = frame.decode_image::<LumaFormat>()?;
