@@ -25,7 +25,7 @@ Arguments:
 Options:
       --webcam                          Capture counter image from webcam
       --filename <png-file>             Read counter image from file
-      --op <op>                         Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"]
+      --op <op>                         Image operation to apply after image is acquired. One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"]. Multiple --op are applied in sequence provided on command line
       --sobel                           Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
       --emit-count <#>                  Number of digits to OCR verify and emit. Good to limit if the last digit is finicky due to roll-over [default: 7]
       --max-plausible-rate <count/sec>  Maximum plausible value change per second to avoid logging bogus values [default: 0.1]
@@ -66,7 +66,7 @@ from the webcam.
 Since the image from the webcam probably needs some massaging to just extract
 the area with the counter, there are image operations that can be applied
 before sent to the digit detection.
-For instance the following flags `--op rotate180 --op crop:10:30:1280:200`
+For instance the following flags `--op rotate180 --op crop:10:30:1270:200`
 will first rotate the image from the webcam by 180 degrees, then crop from
 (x,y) = (10, 30) and the given width and height of 1280, 200.
 

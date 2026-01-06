@@ -38,8 +38,9 @@ struct CliArgs {
     #[arg(long, value_name="png-file")]
     filename: Option<PathBuf>,
 
-    /// Image operations to apply (in that sequence) after image is acquired.
-    /// One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"]
+    /// Image operation to apply after image is acquired.
+    /// One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"].
+    /// Multiple --op are applied in sequence provided on command line.
     #[arg(long="op", value_name="op")]
     process_ops: Vec<ImageOp>,
 
