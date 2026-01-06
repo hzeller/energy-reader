@@ -55,7 +55,7 @@ struct CliArgs {
 
     /// Maximum plausible value change per second to avoid logging bogus
     /// values.
-    #[arg(long, default_value="0.1")]
+    #[arg(long, value_name="count/sec", default_value="0.1")]
     max_plausible_rate: f32,
 
     /// Repeat every these number of seconds (useful with --webcam)
