@@ -94,9 +94,12 @@ impl CrossCorrelator {
         let mut workspace = vec![Complex::default(); w * h];
 
         for needle in &self.needles {
-            for (i, out) in workspace.iter_mut().enumerate() {
-                *out = haystack_fft.freq_domain[i] * needle.fft.freq_domain[i].conj();
-            }
+            workspace.iter_mut()
+                .zip(&haystack_fft.freq_domain)
+                .zip(&needle.fft.freq_domain)
+                .for_each(|((out, h_val), n_val)| {
+                    *out = h_val * n_val.conj();
+                });
             fft_2d(&mut workspace, w, h, &mut self.planner, FftDirection::Inverse);
 
             let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
@@ -138,11 +141,11 @@ impl IntegralImages {
         let mut sum = vec![0u64; (w + 1) * (h + 1)];
         let mut sum_sq = vec![0u64; (w + 1) * (h + 1)];
 
-        for y in 0..h {
+        for (y, row) in img.rows().enumerate() {
             let mut row_sum = 0u64;
             let mut row_sum_sq = 0u64;
-            for x in 0..w {
-                let pixel = img.get_pixel(x as u32, y as u32)[0] as u64;
+            for (x, pixel) in row.enumerate() {
+                let pixel = pixel[0] as u64;
 
                 row_sum += pixel;
                 row_sum_sq += pixel * pixel;
