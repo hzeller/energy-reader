@@ -89,35 +89,39 @@ pub struct DigitPos {
 }
 
 // Find the hightest score digits and emit their positions.
-fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
-                 -> Vec<DigitPos> {
-    // The shortest score vector is the max x-position we check out
+fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32) -> Vec<DigitPos> {
     let x_range = scores.iter().map(|v| v.len()).min().unwrap_or(0) as u32;
     let mut result = Vec::new();
-    let fresh_digit = DigitPos { digit_template: u32::MAX, score: 0.0, pos: x_range };
-    let mut current = fresh_digit.clone();
-    // Find highest score that does not change for the width of a digit.
+
+    let mut current_best: Option<DigitPos> = None;
+
     for x in 0..x_range {
-        for (i, feature_score) in scores.iter().enumerate() {
-            let digit_score = feature_score[x as usize];
-            if digit_score < THRESHOLD {
-                continue;
-            }
-            if digit_score > current.score {
-                current.digit_template = i as u32;
-                current.score = digit_score;
-                current.pos = x;
+        // Find the best template for this specific X position
+        let best_at_x = scores.iter().enumerate()
+            .map(|(i, score_vec)| (i, score_vec[x as usize]))
+            .filter(|&(_, score)| score >= THRESHOLD)
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        if let Some((template_idx, score)) = best_at_x {
+            if current_best.as_ref().map_or(true, |c| score > c.score) {
+                current_best = Some(DigitPos {
+                    digit_template: template_idx as u32,
+                    score,
+                    pos: x,
+                });
             }
         }
 
-        if x >= current.pos + digit_width { // best seen for digit-width
-            result.push(current);
-            current = fresh_digit.clone();
+        // Check if we've passed the width of the current best digit
+        if let Some(best) = &current_best {
+            if x >= best.pos + digit_width {
+                result.push(best.clone());
+                current_best = None;
+            }
         }
     }
-    if current.digit_template != u32::MAX {
-        result.push(current);
-    }
+
+    if let Some(best) = current_best { result.push(best); }
     result
 }
 
