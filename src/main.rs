@@ -254,7 +254,7 @@ fn main() -> ExitCode {
             }
 
             Err(e) => {
-                logger.log_error(captured.timestamp, e.to_string());
+                logger.log_error(captured.timestamp, &e.to_string());
                 if let Some(ref dir) = args.failed_capture_dir {
                     let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
                     let _ = captured.image.save(dir.join(format!("fail-{}.png", ts)));
