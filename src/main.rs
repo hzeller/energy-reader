@@ -1,6 +1,5 @@
 use anyhow::{Result, Context, anyhow};
 use clap::Parser;
-use std::cmp;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{UNIX_EPOCH, Duration};
@@ -151,8 +150,7 @@ fn verify_looks_plausible(locations: &[DigitPos],
 }
 
 fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
-                  expect_count: usize)
-                  -> anyhow::Result<u64> {
+                  expect_count: usize) -> Result<u64> {
     verify_looks_plausible(locations, expect_count)?;
     locations.iter().take(expect_count).try_fold(0, |acc, loc| {
         let filename = &digit_filenames[loc.digit_template as usize];
@@ -187,8 +185,6 @@ fn main() -> ExitCode {
 
     let logger = StdOutSink{};
 
-    let mut max_digit_w = 0;
-    let mut max_digit_h = 0;
     let mut digits = Vec::new();
     for digit_picture in &args.digit_images {
         let digit = load_image_as_grayscale(digit_picture.as_str());
@@ -197,10 +193,10 @@ fn main() -> ExitCode {
         } else {
             digit
         };
-        max_digit_w = cmp::max(max_digit_w, digit.width());
-        max_digit_h = cmp::max(max_digit_h, digit.height());
         digits.push(digit);
     }
+    let max_digit_w = digits.iter().map(|d| d.width()).max().unwrap_or(0);
+    let max_digit_h = digits.iter().map(|d| d.height()).max().unwrap_or(0);
 
     loop {
         let mut captured = match source.read_image() {
@@ -222,11 +218,10 @@ fn main() -> ExitCode {
             let _ = captured.image.save(post_op_file).context("failed to save post-op");
         }
 
-        let haystack = &captured.image;
         let haystack = if args.edge_process {
-            &sobel(haystack)
+            &sobel(&captured.image)
         } else {
-            haystack
+            &captured.image
         };
 
         let correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
