@@ -1,25 +1,31 @@
 use anyhow::Result;
 use clap::Parser;
-use image::GrayImage;
-use std::path::Path;
 use std::cmp;
+use std::path::Path;
 use std::process::ExitCode;
-use std::time::{SystemTime,UNIX_EPOCH,Duration};
+use std::time::{UNIX_EPOCH, Duration};
 
 mod cross_correlator;
-use cross_correlator::{CrossCorrelator,ColumnFeatureScore};
+use cross_correlator::{CrossCorrelator, ColumnFeatureScore};
 
 mod image_util;
-use image_util::{sobel,load_image_as_grayscale, apply_ops};
+use image_util::{sobel, load_image_as_grayscale, apply_ops};
 
 mod debugdigit;
 
+// Where images are coming from ...
 mod sources;
-use sources::{FilenameSource,WebCamSource};
+use sources::{ImageSource, FilenameSource, WebCamSource};
 
-pub const THRESHOLD: f32 = 0.6;
+// ... and the acquired values are sent to.
+mod sinks;
+use sinks::{ResultSink, StdOutSink};
 
-// Plausibility checks
+// Minimum feature threshold to consider robust digit detection.
+const THRESHOLD: f32 = 0.6;
+
+// Plausibility checks. If a digit is missing, that would be aoubt 100% off, so
+// 40% makes sure digits (even with a bit of jitter) are contiguous.
 const ALLOWED_DIGIT_DISTANCE_JITTER_PERCENT: f32 = 40.0;
 
 #[derive(Parser, Debug)]
@@ -74,17 +80,10 @@ struct CliArgs {
     digit_images: Vec<String>,
 }
 
-pub struct TimestampedImage {
-    timestamp: SystemTime,
-    image: GrayImage,
-}
-pub trait ImageSource {
-    fn read_image(&self) -> Result<TimestampedImage>;
-}
-
+/// Detection output: the digit template detected with associated infor.
 #[derive(Clone)]
 pub struct DigitPos {
-    digit_pattern: u32,
+    digit_template: u32,
     score: f32,
     pos: u32,
 }
@@ -95,7 +94,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
     // The shortest score vector is the max x-position we check out
     let x_range = scores.iter().map(|v| v.len()).min().unwrap_or(0) as u32;
     let mut result = Vec::new();
-    let fresh_digit = DigitPos { digit_pattern: u32::MAX, score: 0.0, pos: x_range };
+    let fresh_digit = DigitPos { digit_template: u32::MAX, score: 0.0, pos: x_range };
     let mut current = fresh_digit.clone();
     // Find highest score that does not change for the width of a digit.
     for x in 0..x_range {
@@ -105,7 +104,7 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
                 continue;
             }
             if digit_score > current.score {
-                current.digit_pattern = i as u32;
+                current.digit_template = i as u32;
                 current.score = digit_score;
                 current.pos = x;
             }
@@ -116,14 +115,14 @@ fn locate_digits(scores: &[ColumnFeatureScore], digit_width: u32)
             current = fresh_digit.clone();
         }
     }
-    if current.digit_pattern != u32::MAX {
+    if current.digit_template != u32::MAX {
         result.push(current);
     }
     result
 }
 
-fn looks_plausible(locations: &[DigitPos],
-                   expect_count: usize) -> Result<(), String> {
+fn verify_looks_plausible(locations: &[DigitPos],
+                          expect_count: usize) -> Result<(), String> {
     if locations.len() < 2 {
         return Err("Not even two digits".to_string());
     }
@@ -149,18 +148,19 @@ fn looks_plausible(locations: &[DigitPos],
     Ok(())
 }
 
-fn log_result(out: &mut dyn std::io::Write, ts: &SystemTime,
-              locations: &[DigitPos], digit_filenames: &[String]) {
-    write!(out, "{}\t",
-           ts.duration_since(UNIX_EPOCH).unwrap().as_secs()).unwrap();
-    for loc in locations {
-        let filename = &digit_filenames[loc.digit_pattern as usize];
-        let first_digit = filename.chars().find(|c| c.is_numeric());
-        if let Some(digit) = first_digit {
-            write!(out, "{}", digit).unwrap();
-        }
+fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
+                  expect_count: usize)
+                  -> anyhow::Result<u64, String> {
+    verify_looks_plausible(locations, expect_count)?;
+    let mut result: u64 = 0;
+    for loc in &locations[0..expect_count] {
+        let filename = &digit_filenames[loc.digit_template as usize];
+        let first_digit = filename.chars().find(|c| c.is_ascii_digit())
+            .ok_or("Digit filename needs to contain the digit it represents")?;
+        let c = (first_digit as u8 - b'0') as u64;
+        result = 10 * result + c;
     }
-    writeln!(out).unwrap();
+    Ok(result)
 }
 
 // Params: energy-reader <counter-image> <digit0> <digit1>...
@@ -182,6 +182,8 @@ fn main() -> ExitCode {
         eprintln!("Need one of --filename or --webcam");
         return ExitCode::FAILURE;
     };
+
+    let logger = StdOutSink{};
 
     let mut max_digit_w = 0;
     let mut max_digit_h = 0;
@@ -250,21 +252,23 @@ fn main() -> ExitCode {
                 .unwrap();
         }
 
-        match looks_plausible(&digit_locations, args.emit_count) {
+        match extract_number(&digit_locations,
+                             &args.digit_images,
+                             args.emit_count) {
             Err(e) => {
-                let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
-                eprintln!("{} (at {})", e, ts);
+                logger.log_error(captured.timestamp, e);
                 if args.failed_capture_dir.is_some() {
+                    let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
                     let filename = format!("{}/fail-{}.png",
                                            args.failed_capture_dir.as_ref().unwrap(),
-                                           ts
-                                           );
+                                           ts,
+                    );
                     captured.image.save(filename).unwrap();
                 }
                 last_success=ExitCode::FAILURE;
             }
-            Ok(_) => {
-                log_result(&mut std::io::stdout(), &captured.timestamp, &digit_locations[0..args.emit_count], &args.digit_images);
+            Ok(meter_value) => {
+                logger.log_value(captured.timestamp, meter_value);
                 last_success = ExitCode::SUCCESS;
             }
         };

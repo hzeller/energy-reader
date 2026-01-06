@@ -52,7 +52,7 @@ pub fn debug_print_digits(
         // Highlight starting from the minimum score this particular digit
         // was ever selected at.
         let highlight_score = digit_positions.iter()
-            .filter_map(|p| if p.digit_pattern as usize == i {
+            .filter_map(|p| if p.digit_template as usize == i {
                 Some(p.score)
             } else {
                 None
@@ -70,14 +70,14 @@ pub fn debug_print_digits(
 
     // The final recognized digits.
     for loc in digit_positions {
-        let digit_pic = &digits[loc.digit_pattern as usize];
+        let digit_pic = &digits[loc.digit_template as usize];
         image::imageops::overlay(
             &mut output,
             digit_pic,
             (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
-        eprintln!("{} {:5} {:.3}", digit_filename[loc.digit_pattern as usize],
+        eprintln!("{} {:5} {:.3}", digit_filename[loc.digit_template as usize],
                   loc.pos, loc.score);
     }
 

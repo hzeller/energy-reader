@@ -1,4 +1,4 @@
-use crate::{ImageSource,TimestampedImage};
+use image::GrayImage;
 use crate::image_util::load_image_as_grayscale;
 
 use std::time::SystemTime;
@@ -6,6 +6,16 @@ use anyhow::Result;
 use nokhwa::Camera;
 use nokhwa::pixel_format::LumaFormat; // Use Luma for grayscale
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+
+pub struct TimestampedImage {
+    pub timestamp: SystemTime,
+    pub image: GrayImage,
+}
+
+/// Acquisition of new images for the detection logic.
+pub trait ImageSource {
+    fn read_image(&self) -> Result<TimestampedImage>;
+}
 
 pub struct FilenameSource {
     filename: String
