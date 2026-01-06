@@ -1,10 +1,12 @@
-# Read energy counter such as gas or electricity.
+# Read utility meters such as gas, water, or electricity.
 
 Mostly I need that at home to integrate the analog reader output into my
 home automation and monitoring.
 
-Rather than doing a generic OCR, this is just matching digits using normalized
-cross correlation.
+Rather than doing a generic OCR, this is matching digits using normalized
+cross correlation (this requires to extract sample digit images first).
+
+This is meant to read the typical mechanical counters found in utility meters.
 
 ## Build
 
@@ -15,7 +17,7 @@ cargo build --release
 ## Run
 
 ```
-Usage: energy-reader [OPTIONS] [DIGIT_IMAGES]...
+Usage: utility-reader [OPTIONS] [DIGIT_IMAGES]...
 
 Arguments:
   [DIGIT_IMAGES]...  Digit template images to match; the first digit found in the filename is the matched digit. Allows to have multiple templates for the same digit if needed (e.g. d1-0.png, d1-1.png)
@@ -23,13 +25,13 @@ Arguments:
 Options:
       --webcam                        Capture counter image from webcam
       --filename <png-file>           Read counter image from file
-      --op <op>                       Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
+      --op <op>                       Image operations to apply (in that sequence) after image is acquired. One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"]
       --sobel                         Process input images through sobel edge-detect. Can improve accuracy with very clean and non-distorted images
       --emit-count <#>                Number of digits to OCR verify and emit. Good to limit if the last digit is finicky due to roll-over [default: 7]
       --repeat-sec <seconds>          Repeat every these number of seconds (useful with --webcam)
-      --debug-capture <file-or-dir>   Output the image captured. If pre-existing directory, writes snap-<timestemp>.png images, otherwise it is intepreted as filename
-      --debug-post-ops <file-or-dir>  Output the image after the process ops have been applied. If directory, writes to that processed-<timestamp>.png, otherwise interprets it as filename
-      --failed-capture <file-or-dir>  Output image that could not detect all digits. If directory, writes fail-<timestamp>png images, otherwise interprets as filename
+      --debug-capture <file-or-dir>   Output the image captured. If existing directory, writes snap-<timestemp>.png images, otherwise intepreted as filename
+      --debug-post-ops <file-or-dir>  Output the image after the process ops have been applied. If existing directory, writes processed-<timestemp>.png images, otherwise intepreted as filename
+      --failed-capture <file-or-dir>  Output image that could not detect all digits. If existing directory, writes fail-<timestemp>.png images, otherwise intepreted as filename
       --debug-scoring <img-file>      Generate a debug image that illustrates the detection details
   -h, --help                          Print help
   -V, --version                       Print version

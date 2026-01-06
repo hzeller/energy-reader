@@ -39,7 +39,7 @@ struct CliArgs {
     filename: Option<PathBuf>,
 
     /// Image operations to apply (in that sequence) after image is acquired.
-    /// One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
+    /// One of ["rotate90", "rotate180", "flip-x", "flip-y", "crop:<x>:<y>:<w>:<h>"]
     #[arg(long="op", value_name="op")]
     process_ops: Vec<ImageOp>,
 
@@ -57,19 +57,21 @@ struct CliArgs {
     #[arg(long, value_name="seconds")]
     repeat_sec: Option<u64>,
 
-    /// Output the image captured. If pre-existing directory, writes
-    /// snap-<timestemp>.png images, otherwise it is intepreted as filename.
+    /// Output the image captured.
+    /// If existing directory, writes snap-<timestemp>.png images, otherwise
+    /// intepreted as filename.
     #[arg(long, value_name="file-or-dir")]
     debug_capture: Option<PathBuf>,
 
-    /// Output the image after the process ops have been applied. If
-    /// directory, writes to that processed-<timestamp>.png, otherwise
-    /// interprets it as filename.
+    /// Output the image after the process ops have been applied.
+    /// If existing directory, writes processed-<timestemp>.png images,
+    /// otherwise intepreted as filename.
     #[arg(long, value_name="file-or-dir")]
     debug_post_ops: Option<PathBuf>,
 
-    /// Output image that could not detect all digits. If directory, writes
-    /// fail-<timestamp>png images, otherwise interprets as filename.
+    /// Output image that could not detect all digits.
+    /// If existing directory, writes fail-<timestemp>.png images, otherwise
+    /// intepreted as filename.
     #[arg(long, value_name="file-or-dir")]
     failed_capture: Option<PathBuf>,
 
@@ -180,7 +182,7 @@ fn maybe_debug_image(file_or_dir: &Option<PathBuf>, prefix: &str,
     }
 }
 
-// Params: energy-reader <counter-image> <digit0> <digit1>...
+// Params: utility-reader <counter-image> <digit0> <digit1>...
 fn main() -> ExitCode {
     let args = CliArgs::parse();
 

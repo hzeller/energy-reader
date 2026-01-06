@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use image::{GrayImage, Luma};
 use anyhow::{Result, Context};
-use image::imageops::{rotate90, rotate180, crop};
+use image::imageops::{rotate90, rotate180, crop, flip_vertical, flip_horizontal};
 
 pub fn load_image_as_grayscale(path: &str) -> GrayImage {
     image::open(path)
@@ -41,6 +41,8 @@ pub fn sobel(input: &GrayImage) -> GrayImage {
 pub enum ImageOp {
     Rotate90,
     Rotate180,
+    FlipHorizontal,
+    FlipVertical,
     Crop { x: u32, y: u32, w: u32, h: u32 },
 }
 
@@ -52,13 +54,15 @@ impl FromStr for ImageOp {
         match parts.as_slice() {
             ["rotate90"] => Ok(ImageOp::Rotate90),
             ["rotate180"] => Ok(ImageOp::Rotate180),
+            ["flip-x"] => Ok(ImageOp::FlipHorizontal),
+            ["flip-y"] => Ok(ImageOp::FlipVertical),
             ["crop", x, y, w, h] => Ok(ImageOp::Crop {
                 x: x.parse().context("Can't parse 1st ('x') as integer")?,
                 y: y.parse().context("Can't parse 2nd ('y') as integer")?,
                 w: w.parse().context("Can't parse 3rd ('width') as integer")?,
                 h: h.parse().context("Can't parse 4th ('height') as integer")?,
             }),
-            _ => anyhow::bail!("Unknown operation format: {}", s),
+            _ => anyhow::bail!("Unknown operation format: {}; one of 'rotate90', 'rotate180', 'flip-x', flip-y', 'crop:<x>:<y>:<width>:<height>'", s),
         }
     }
 }
@@ -68,6 +72,8 @@ pub fn apply_ops(image: &mut GrayImage, ops: &[ImageOp]) -> Result<()> {
         match op {
             ImageOp::Rotate90 => *image = rotate90(image),
             ImageOp::Rotate180 => *image = rotate180(image),
+            ImageOp::FlipHorizontal => *image = flip_horizontal(image),
+            ImageOp::FlipVertical => *image = flip_vertical(image),
             ImageOp::Crop { x, y, w, h } => {
                 if x + w > image.width() || y + h > image.height() {
                     anyhow::bail!("Crop dimensions out of bounds; image size is {}x{}", image.width(), image.height());
