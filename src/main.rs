@@ -8,7 +8,7 @@ mod cross_correlator;
 use cross_correlator::{CrossCorrelator, ColumnFeatureScore};
 
 mod image_util;
-use image_util::{sobel, load_image_as_grayscale, apply_ops};
+use image_util::{sobel, load_image_as_grayscale, apply_ops, ImageOp};
 
 mod debugdigit;
 
@@ -41,7 +41,7 @@ struct CliArgs {
     /// Image operations to apply (in that sequence) after image is acquired.
     /// One of ["rotate90", "rotate180", "crop:<x>:<y>:<w>:<h>"]
     #[arg(long="op", value_name="op")]
-    process_ops: Vec<String>,
+    process_ops: Vec<ImageOp>,
 
     /// Process input images through sobel edge-detect. Can improve accuracy
     /// with very clean and non-distorted images.

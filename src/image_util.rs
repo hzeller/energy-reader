@@ -1,5 +1,6 @@
+use std::str::FromStr;
 use image::{GrayImage, Luma};
-use anyhow::{Result, Context, anyhow};
+use anyhow::{Result, Context};
 use image::imageops::{rotate90, rotate180, crop};
 
 pub fn load_image_as_grayscale(path: &str) -> GrayImage {
@@ -36,24 +37,43 @@ pub fn sobel(input: &GrayImage) -> GrayImage {
     result
 }
 
-pub fn apply_ops(image: &mut GrayImage, ops: &[String]) -> Result<()> {
-    for op in ops {
-        let parts: Vec<&str> = op.split(':').collect();
+#[derive(Clone, Debug)]
+pub enum ImageOp {
+    Rotate90,
+    Rotate180,
+    Crop { x: u32, y: u32, w: u32, h: u32 },
+}
 
+impl FromStr for ImageOp {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
         match parts.as_slice() {
-            ["rotate180"] => *image = rotate180(image),
-            ["rotate90"] => *image = rotate90(image),
-            ["crop", x, y, w, h] => {
-                let x : u32 = x.parse().context("Invalid x")?;
-                let y : u32 = y.parse().context("Invalid y")?;
-                let w : u32 = w.parse().context("Invalid width")?;
-                let h : u32 = h.parse().context("Invalid height")?;
+            ["rotate90"] => Ok(ImageOp::Rotate90),
+            ["rotate180"] => Ok(ImageOp::Rotate180),
+            ["crop", x, y, w, h] => Ok(ImageOp::Crop {
+                x: x.parse().context("Can't parse 1st ('x') as integer")?,
+                y: y.parse().context("Can't parse 2nd ('y') as integer")?,
+                w: w.parse().context("Can't parse 3rd ('width') as integer")?,
+                h: h.parse().context("Can't parse 4th ('height') as integer")?,
+            }),
+            _ => anyhow::bail!("Unknown operation format: {}", s),
+        }
+    }
+}
+
+pub fn apply_ops(image: &mut GrayImage, ops: &[ImageOp]) -> Result<()> {
+    for op in ops {
+        match op {
+            ImageOp::Rotate90 => *image = rotate90(image),
+            ImageOp::Rotate180 => *image = rotate180(image),
+            ImageOp::Crop { x, y, w, h } => {
                 if x + w > image.width() || y + h > image.height() {
-                    return Err(anyhow!("Crop dimensions out of image bounds"));
+                    anyhow::bail!("Crop dimensions out of bounds; image size is {}x{}", image.width(), image.height());
                 }
-                *image = crop(image, x, y, w, h).to_image();
+                *image = crop(image, *x, *y, *w, *h).to_image();
             }
-            _ => anyhow::bail!("unknown or malformed op: {}", op),
         }
     }
     Ok(())
