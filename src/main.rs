@@ -14,7 +14,7 @@ mod debugdigit;
 
 // Where images are coming from ...
 mod sources;
-use sources::{ImageSource, FilenameSource, WebCamSource};
+use sources::{FilenameSource, ImageSource, TimestampedImage, WebCamSource};
 
 // ... and the acquired values are sent to.
 mod sinks;
@@ -57,22 +57,25 @@ struct CliArgs {
     #[arg(long, value_name="seconds")]
     repeat_sec: Option<u64>,
 
-    /// Output the image captured. If this is a pre-existing directory, writes
+    /// Output the image captured. If pre-existing directory, writes
     /// snap-<timestemp>.png images, otherwise it is intepreted as filename.
     #[arg(long, value_name="file-or-dir")]
     debug_capture: Option<PathBuf>,
 
-    /// Output the image after the process ops have been applied.
-    #[arg(long, value_name="img-file")]
+    /// Output the image after the process ops have been applied. If
+    /// directory, writes to that processed-<timestamp>.png, otherwise
+    /// interprets it as filename.
+    #[arg(long, value_name="file-or-dir")]
     debug_post_ops: Option<PathBuf>,
+
+    /// Output image that could not detect all digits. If directory, writes
+    /// fail-<timestamp>png images, otherwise interprets as filename.
+    #[arg(long, value_name="file-or-dir")]
+    failed_capture: Option<PathBuf>,
 
     /// Generate a debug image that illustrates the detection details.
     #[arg(long, value_name="img-file")]
     debug_scoring: Option<PathBuf>,
-
-    /// Directory to store images that could not detect all digits.
-    #[arg(long, value_name="dir")]
-    failed_capture_dir: Option<PathBuf>,
 
     /// Digit template images to match; the first digit found in the filename
     /// is the matched digit. Allows to have multiple templates for the same
@@ -164,16 +167,22 @@ fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
     })
 }
 
+fn maybe_debug_image(file_or_dir: &Option<PathBuf>, prefix: &str,
+                     ts_img: &TimestampedImage) {
+    let ts = ts_img.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    if let Some(path) = file_or_dir {
+        let img_file = if path.is_dir() {
+            &path.join(format!("{}-{}.png", prefix, ts))
+        } else {
+            path
+        };
+        let _ = ts_img.image.save(img_file).context("failed to save debug capture");
+    }
+}
+
 // Params: energy-reader <counter-image> <digit0> <digit1>...
 fn main() -> ExitCode {
     let args = CliArgs::parse();
-
-    if let Some(ref failed_capture_dir) = args.failed_capture_dir
-        && !failed_capture_dir.is_dir() {
-            eprintln!("'{:?}' needs to be an existing dir for --failed_capture_dir",
-                      failed_capture_dir);
-            return ExitCode::FAILURE;
-    }
 
     let source: Box<dyn ImageSource> = if let Some(file) = args.filename {
         Box::new(FilenameSource::new(file))
@@ -208,24 +217,13 @@ fn main() -> ExitCode {
                 continue;
             }
         };
-        let ts = captured.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
-
-        if let Some(ref capture_file) = args.debug_capture {
-            let img_file = if capture_file.is_dir() {
-                &capture_file.join(format!("snap-{}.png", ts))
-            } else {
-                capture_file
-            };
-            let _ = captured.image.save(img_file).context("failed to save debug capture");
-        }
+        maybe_debug_image(&args.debug_capture, "snap", &captured);
 
         if let Err(e) = apply_ops(&mut captured.image, &args.process_ops) {
             eprintln!("Check your image ops: {e:#}");
             return ExitCode::FAILURE;
         }
-        if let Some(ref post_op_file) = args.debug_post_ops {
-            let _ = captured.image.save(post_op_file).context("failed to save post-op");
-        }
+        maybe_debug_image(&args.debug_post_ops, "processed", &captured);
 
         let haystack = if args.edge_process {
             &sobel(&captured.image)
@@ -264,9 +262,7 @@ fn main() -> ExitCode {
 
             Err(e) => {
                 logger.log_error(captured.timestamp, &e.to_string());
-                if let Some(ref dir) = args.failed_capture_dir {
-                    let _ = captured.image.save(dir.join(format!("fail-{}.png", ts)));
-                }
+                maybe_debug_image(&args.failed_capture, "fail", &captured);
                 ExitCode::FAILURE
             }
         };
