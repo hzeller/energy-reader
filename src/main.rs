@@ -216,6 +216,7 @@ fn main() -> ExitCode {
     let max_digit_w = digits.iter().map(|d| d.width()).max().unwrap_or(0);
     let max_digit_h = digits.iter().map(|d| d.height()).max().unwrap_or(0);
 
+    let mut correlator: Option<CrossCorrelator> = None;
     loop {
         let mut captured = match source.read_image() {
             Ok(c) => c,
@@ -239,12 +240,16 @@ fn main() -> ExitCode {
             &captured.image
         };
 
-        let mut correlator = CrossCorrelator::new(haystack, max_digit_w, max_digit_h);
+        let corr = correlator.get_or_insert_with(|| {
+            let mut c = CrossCorrelator::new(haystack.width() + max_digit_w,
+                                             haystack.height() + max_digit_h);
+            for digit_needle in &digits {  // First time: add all needles.
+                c.add_needle(digit_needle);
+            }
+            c
+        });
 
-        let digit_scores: Vec<_> = digits.iter()
-            .map(|d| correlator.cross_correlate_with(d))
-            .collect();
-
+        let digit_scores = corr.calculate_needle_scores_for(haystack);
         let digit_locations = locate_digits(&digit_scores, max_digit_w);
 
         if let Some(ref debug_scoring) = args.debug_scoring {

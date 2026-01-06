@@ -3,74 +3,66 @@ use image::GrayImage;
 
 pub type ColumnFeatureScore = Vec<f32>;
 
-pub struct CrossCorrelator<'a> {
-    haystack: &'a GrayImage,
-    fft_width: usize,
-    fft_height: usize,
-    haystack_fft: Vec<Complex<f32>>,
-    haystack_integral: IntegralImages,
+struct ImageFFT {
+    data: Vec<Complex<f32>>,  // should be renamed
+    width: u32,
+    height: u32,
+}
+
+impl ImageFFT {
+    fn new(image: &GrayImage, average: f32, padded_w: usize,
+           padded_h: usize, planner: &mut FftPlanner<f32>) -> Self {
+        let mut fft = vec![Complex::default(); padded_w * padded_h];
+        for (y, row) in image.rows().enumerate() {
+            let offset = y * padded_w;
+            for (x, pixel) in row.enumerate() {
+                fft[offset + x] = Complex::new(pixel[0] as f32 - average, 0.0);
+            }
+        }
+        fft_2d(&mut fft, padded_w, padded_h, planner, FftDirection::Forward);
+        Self {
+            data: fft,
+            width: image.width(),
+            height: image.height(),
+        }
+    }
+}
+
+struct PreparedNeedle {
+    fft: ImageFFT,
+    pixel_count: f32,
+    std_dev: f32,
+}
+
+pub struct CrossCorrelator {
+    padded_width: usize,
+    padded_height: usize,
+
+    needles: Vec<PreparedNeedle>,
 
     planner: FftPlanner<f32>,  // Caches decisions
 }
 
 // Use FFT and the integral image to produce a normalized cross correlation.
-impl<'a> CrossCorrelator<'a> {
-    // Create a new cross correlator for given search image (the 'haystack') that
-    // then provides an efficient way to cross correlate with elements found inside.
-    pub fn new(haystack: &'a GrayImage,
-               max_needle_width: u32, max_needle_height: u32)
-               -> CrossCorrelator<'a> {
-        let haystack_integral = IntegralImages::new(haystack);
-        let fft_width = (haystack.width() + max_needle_width) as usize;
-        let fft_height = (haystack.height() + max_needle_height) as usize;
-
-        let mut haystack_fft = vec![Complex::default(); fft_width * fft_height];
-        for (y, row) in haystack.rows().enumerate() {
-            let offset = y * fft_width;
-            for (x, pixel) in row.enumerate() {
-                haystack_fft[offset + x] = Complex::new(pixel[0] as f32, 0.0);
-            }
-        }
-
-        let mut planner = FftPlanner::new();
-        fft_2d(&mut haystack_fft, fft_width, fft_height, &mut planner, FftDirection::Forward);
-
-        Self {
-            haystack,
-            fft_width,
-            fft_height,
-            haystack_fft,
-            haystack_integral,
+impl CrossCorrelator {
+    /// Create a new cross correlator for given size (haystack+needle dimensions)
+    pub fn new(fft_width: u32, fft_height: u32)-> CrossCorrelator {
+        let planner = FftPlanner::new();
+         Self {
+            padded_width: fft_width as usize,
+            padded_height: fft_height as usize,
+            needles: Vec::new(),
             planner,
         }
     }
 
-    // Cross correlate the haystack with "needle" and provide a needls score
-    // over the length of the haystack.
-    pub fn cross_correlate_with(&mut self, needle: &GrayImage)
-                                -> ColumnFeatureScore {
-        let n_pixels = (needle.width() * needle.height()) as f32;
+    /// Add needle the haystack is checked against. The cross-correlate
+    /// function considers all these needles.
+    pub fn add_needle(&mut self, needle: &GrayImage) {
+        let pixel_count = (needle.width() * needle.height()) as f32;
         let n_sum: f32 = needle.iter().map(|&p| p as f32).sum();
-        let n_avg = n_sum / n_pixels;
+        let n_avg = n_sum / pixel_count;
 
-        let (w, h) = (self.fft_width, self.fft_height);
-        let mut n_space = vec![Complex::default(); w * h];
-        for (y, row) in needle.rows().enumerate() {
-            let offset = y * self.fft_width;
-            for (x, pixel) in row.enumerate() {
-                n_space[offset + x] = Complex::new(pixel[0] as f32 - n_avg, 0.0);
-            }
-        }
-
-        // Don't touch preprocessed haystack_fft, do all modifications in local n_space
-        fft_2d(&mut n_space, w, h, &mut self.planner, FftDirection::Forward);
-        for (n_val, h_val) in n_space.iter_mut().zip(&self.haystack_fft) {
-            *n_val = h_val * n_val.conj();
-        }
-        fft_2d(&mut n_space, w, h, &mut self.planner, FftDirection::Inverse);
-
-
-        // Prepare needle variance for normalized cross correlation
         let n_sq_diff_sum: f32 = needle
             .iter()
             .map(|&p| {
@@ -78,27 +70,56 @@ impl<'a> CrossCorrelator<'a> {
                 diff * diff
             })
             .sum();
-        let n_std_dev = n_sq_diff_sum.sqrt();
-        let (nw, nh) = (needle.width() as usize, needle.height() as usize);
-        let fft_norm = (w * h) as f32;
+        let std_dev = n_sq_diff_sum.sqrt();
 
-        (0..(self.haystack.width() - needle.width()))
-            .map(|x| {
-                let x = x as usize;
-                // Find max score in this column
-                (0..(self.haystack.height() - needle.height()) as usize)
-                    .map(|y| {
-                        let numerator = n_space[y * w + x].re / fft_norm;
-                        let (sum, sum_sq) = self.haystack_integral.get_window_stats(x, y, nw, nh);
+        self.needles.push(PreparedNeedle {
+            fft: ImageFFT::new(needle, n_avg, self.padded_width,
+                               self.padded_height, &mut self.planner),
+            pixel_count,
+            std_dev,
+        })
+    }
 
-                        let h_var = (sum_sq - (sum * sum) / n_pixels).max(0.0);
-                        let denom = n_std_dev * h_var.sqrt();
+    /// Given a haystack, run cross correlation with all added needles,
+    /// and emit a feature score for each.
+    pub fn calculate_needle_scores_for(&mut self, haystack: &GrayImage)
+                                       -> Vec<ColumnFeatureScore> {
+        let haystack_fft = ImageFFT::new(haystack, 0.0,
+                                         self.padded_width, self.padded_height,
+                                         &mut self.planner);
+        let haystack_integral = IntegralImages::new(haystack);
+        let (w, h) = (self.padded_width, self.padded_height);
+        let mut result = Vec::new();
+        for needle in  &self.needles {
+            let mut n_fft = needle.fft.data.clone();
+            for (n_val, h_val) in n_fft.iter_mut().zip(&haystack_fft.data) {
+                *n_val = h_val * n_val.conj();
+            }
+            fft_2d(&mut n_fft, w, h, &mut self.planner, FftDirection::Inverse);
 
-                        if denom > 1e-6 { numerator / denom } else { 0.0 }
-                    })
-                    .fold(0.0f32, |max, score| max.max(score)) // find the max in this column.
-            })
-            .collect()
+            let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
+            let fft_norm = (w * h) as f32;
+
+            let score = (0..(haystack_fft.width - needle.fft.width))
+                .map(|x| {
+                    let x = x as usize;
+                    // Find max score in this column
+                    (0..(haystack_fft.height - needle.fft.height) as usize)
+                        .map(|y| {
+                            let numerator = n_fft[y * w + x].re / fft_norm;
+                            let (sum, sum_sq) = haystack_integral.get_window_stats(x, y, nw, nh);
+
+                            let h_var = (sum_sq - (sum * sum) / needle.pixel_count).max(0.0);
+                            let denom = needle.std_dev * h_var.sqrt();
+
+                            if denom > 1e-6 { numerator / denom } else { 0.0 }
+                        })
+                        .fold(0.0f32, |max, score| max.max(score)) // find the max in this column.
+                })
+                .collect();
+            result.push(score);
+        }
+        result
     }
 }
 
