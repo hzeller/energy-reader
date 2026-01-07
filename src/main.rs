@@ -178,7 +178,8 @@ fn extract_number(locations: &[DigitPos], digit_filenames: &[String],
 
 fn maybe_debug_image(file_or_dir: &Option<PathBuf>, prefix: &str,
                      ts_img: &TimestampedImage) {
-    let ts = ts_img.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let ts = ts_img.timestamp.duration_since(UNIX_EPOCH)
+        .unwrap_or_default().as_secs();
     if let Some(path) = file_or_dir {
         let img_file = if path.is_dir() {
             &path.join(format!("{}-{}.png", prefix, ts))
@@ -264,7 +265,7 @@ fn main() -> ExitCode {
                 &args.digit_images
             )
                 .save(debug_scoring)
-                .unwrap();
+                .context("While saving --debug-scoring image").unwrap();
         }
 
         let result = extract_number(&digit_locations, &args.digit_images, args.emit_count);
