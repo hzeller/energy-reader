@@ -17,7 +17,7 @@ set terminal kittycairo scroll size graph_width,graph_height
 #set terminal png size graph_width,graph_height
 #set output "/tmp/graph.png"
 
-set key at graph 0.01, 0.9 left top
+set key at graph 0.01, 0.85 left top
 
 #-- Background boxes and weekday labels
 set style rectangle back fc rgb "#fafafa" fs solid 1.0 noborder
@@ -31,10 +31,12 @@ t_start = t_start - (int(t_start) % one_day)
 
 do for [t = t_start : t_end : one_day] {
     day_name = strftime("%A", t)
+    date_txt = strftime("%Y-%m-%d", t)
 
     t_mid = t + (one_day / 2)
     # Place the label at the top (graph 0.95)
     set label day_name at t, graph 0.95 left font "Sans-Serif,16"
+    set label date_txt at t, graph 0.90 left font "Sans-Serif,12"
     day_index = int((t - t_start) / one_day)
     if (day_index % 2 == 0) {
       # Color background boxes
@@ -49,8 +51,9 @@ set grid y2tics
 
 set xdata time
 set timefmt "%s"
-set format x "(%Y-%m-%d) %H:%M"
+set format x "%H:%M"
 set xtics rotate by 45 nomirror right
+set xtics 7200
 
 set format y "%.1f"
 set format y2 "%.1f"
