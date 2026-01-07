@@ -14,6 +14,10 @@ pkgs.mkShell {
       # Graphing outputs.
       gnuplot
       gawk
+
+      # For making the hood
+      openscad-unstable
+      prusa-slicer
     ];
 
 }
