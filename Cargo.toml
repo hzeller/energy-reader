@@ -3,6 +3,9 @@ name = "utility-reader"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+debug_timing = []
+
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.0", features = ["derive"] }

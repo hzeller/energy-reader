@@ -12,6 +12,17 @@ use image_util::{sobel, load_image_as_grayscale, apply_ops, ImageOp};
 
 mod debugdigit;
 
+#[cfg(feature = "debug_timing")]
+mod scoped_timer;
+
+#[cfg(feature = "debug_timing")]
+pub use scoped_timer::ScopedTimer;
+
+#[cfg(not(feature = "debug_timing"))]
+mod empty_scoped_timer;
+#[cfg(not(feature = "debug_timing"))]
+pub use empty_scoped_timer::ScopedTimer;
+
 // Where images are coming from ...
 mod sources;
 use sources::{FilenameSource, ImageSource, TimestampedImage, WebCamSource};

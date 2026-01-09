@@ -1,6 +1,8 @@
 use rustfft::{FftPlanner, num_complex::Complex, FftDirection};
 use image::GrayImage;
 
+use crate::ScopedTimer;
+
 pub type ColumnFeatureScore = Vec<f32>;
 
 struct ImageFFT {
@@ -105,6 +107,7 @@ impl CrossCorrelator {
             let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
             let fft_norm = (w * h) as f32;
 
+            let _ = ScopedTimer::new("collect score");
             let score = (0..(haystack_fft.width - needle.fft.width))
                 .map(|x| {
                     let x = x as usize;
@@ -185,6 +188,7 @@ impl IntegralImages {
 
 fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
           planner: &mut FftPlanner<f32>, direction: FftDirection) {
+    let _ = ScopedTimer::new("fft_2d()");
     let fft_row = planner.plan_fft(width, direction);
     data.chunks_exact_mut(width).for_each(|row| fft_row.process(row));
 
