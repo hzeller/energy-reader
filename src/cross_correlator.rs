@@ -61,6 +61,7 @@ impl CrossCorrelator {
     /// Add needle the haystack is checked against. The cross-correlate
     /// function considers all these needles.
     pub fn add_needle(&mut self, needle: &GrayImage) {
+        let _ = ScopedTimer::new("add_needle()");
         let pixel_count = (needle.width() * needle.height()) as f32;
         let n_sum: f32 = needle.iter().map(|&p| p as f32).sum();
         let n_avg = n_sum / pixel_count;

@@ -1,5 +1,7 @@
-use image::GrayImage;
+use crate::ScopedTimer;
 use crate::image_util::load_image_as_grayscale;
+
+use image::GrayImage;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use anyhow::{Result, Context};
@@ -40,6 +42,7 @@ impl ImageSource for FilenameSource {
 pub struct WebCamSource;
 impl ImageSource for WebCamSource {
     fn read_image(&self) -> Result<TimestampedImage> {
+        let _ = ScopedTimer::new("read_image() from webcam");
         let cam = CameraIndex::Index(0);
         let format = RequestedFormat::new::<LumaFormat>(
             RequestedFormatType::AbsoluteHighestResolution,

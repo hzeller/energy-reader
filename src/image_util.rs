@@ -1,3 +1,5 @@
+use crate::ScopedTimer;
+
 use std::str::FromStr;
 use image::{GrayImage, Luma};
 use anyhow::{Result, Context};
@@ -68,6 +70,7 @@ impl FromStr for ImageOp {
 }
 
 pub fn apply_ops(image: &mut GrayImage, ops: &[ImageOp]) -> Result<()> {
+    let _ = ScopedTimer::new("image_utils::apply_ops()");
     for op in ops {
         match op {
             ImageOp::Rotate90 => *image = rotate90(image),

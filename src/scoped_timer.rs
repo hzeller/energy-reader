@@ -18,6 +18,6 @@ impl ScopedTimer {
 impl Drop for ScopedTimer {
     fn drop(&mut self) {
         let duration = Instant::now() - self.start;
-        println!("{} took {:?}", self.title, duration);
+        eprintln!("{} took {:?}", self.title, duration);
     }
 }
