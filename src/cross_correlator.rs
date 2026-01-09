@@ -61,7 +61,6 @@ impl CrossCorrelator {
     /// Add needle the haystack is checked against. The cross-correlate
     /// function considers all these needles.
     pub fn add_needle(&mut self, needle: &GrayImage) {
-        let _ = ScopedTimer::new("add_needle()");
         let pixel_count = (needle.width() * needle.height()) as f32;
         let n_sum: f32 = needle.iter().map(|&p| p as f32).sum();
         let n_avg = n_sum / pixel_count;
@@ -108,7 +107,7 @@ impl CrossCorrelator {
             let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
             let fft_norm = (w * h) as f32;
 
-            let _ = ScopedTimer::new("collect score");
+            let _timer = ScopedTimer::new("collect score");
             let score = (0..(haystack_fft.width - needle.fft.width))
                 .map(|x| {
                     let x = x as usize;
@@ -189,7 +188,7 @@ impl IntegralImages {
 
 fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
           planner: &mut FftPlanner<f32>, direction: FftDirection) {
-    let _ = ScopedTimer::new("fft_2d()");
+    let _timer = ScopedTimer::new("fft_2d()");
     let fft_row = planner.plan_fft(width, direction);
     data.chunks_exact_mut(width).for_each(|row| fft_row.process(row));
 

@@ -42,7 +42,7 @@ impl ImageSource for FilenameSource {
 pub struct WebCamSource;
 impl ImageSource for WebCamSource {
     fn read_image(&self) -> Result<TimestampedImage> {
-        let _ = ScopedTimer::new("read_image() from webcam");
+        let _timer = ScopedTimer::new("read_image() from webcam");
         let cam = CameraIndex::Index(0);
         let format = RequestedFormat::new::<LumaFormat>(
             RequestedFormatType::AbsoluteHighestResolution,
