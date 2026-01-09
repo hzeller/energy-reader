@@ -190,9 +190,13 @@ fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
           planner: &mut FftPlanner<f32>, direction: FftDirection) {
     let _timer = ScopedTimer::new("fft_2d()");
     let fft_row = planner.plan_fft(width, direction);
-    data.chunks_exact_mut(width).for_each(|row| fft_row.process(row));
+    let mut scratch = vec![Complex::default(); fft_row.get_inplace_scratch_len()];
+    data.chunks_exact_mut(width).for_each(
+        |row| fft_row.process_with_scratch(row, &mut scratch)
+    );
 
     let fft_col = planner.plan_fft(height, direction);
+    scratch.resize(fft_col.get_inplace_scratch_len(), Complex::default());
     let mut column = vec![Complex::default(); height];
     for x in 0..width {
         // slice through data and extract the column.
@@ -200,7 +204,7 @@ fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
             column[y] = data[y * width + x];
         }
 
-        fft_col.process(&mut column);
+        fft_col.process_with_scratch(&mut column, &mut scratch);
 
         for y in 0..height {
             data[y * width + x] = column[y];
