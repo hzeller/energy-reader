@@ -200,14 +200,18 @@ fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
     let mut column = vec![Complex::default(); height];
     for x in 0..width {
         // slice through data and extract the column.
+        let mut row = 0;
         for y in 0..height {
-            column[y] = data[y * width + x];
+            column[y] = data[row + x];
+            row += width;
         }
 
         fft_col.process_with_scratch(&mut column, &mut scratch);
 
+        row = 0;
         for y in 0..height {
-            data[y * width + x] = column[y];
+            data[row + x] = column[y];
+            row += width;
         }
     }
 }
