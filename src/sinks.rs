@@ -1,4 +1,4 @@
-use std::time::{SystemTime,UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Result of the detection logic.
 pub trait ResultSink {
@@ -9,14 +9,18 @@ pub trait ResultSink {
 pub struct StdOutSink {
     last_value: u64,
     last_timestamp: u64,
-    max_plausible_rate: f32,  // value / sec
+    max_plausible_rate: f32, // value / sec
 }
 
 impl StdOutSink {
     /// Create new stdout sink, that only emits values that are ever increasing,
     /// and also don't increase by more than max_plausible_rate (value/sec)
     pub fn new(max_plausible_rate: f32) -> Self {
-        StdOutSink{ last_value: 0, last_timestamp: 0, max_plausible_rate}
+        StdOutSink {
+            last_value: 0,
+            last_timestamp: 0,
+            max_plausible_rate,
+        }
     }
 
     fn convert_ts(time: SystemTime) -> u64 {
@@ -31,7 +35,10 @@ impl ResultSink for StdOutSink {
         let ts = Self::convert_ts(time);
         // Not going backwards ?
         if number < self.last_value {
-            let err = format!("Value {} going backwards (before: {})", number, self.last_value);
+            let err = format!(
+                "Value {} going backwards (before: {})",
+                number, self.last_value
+            );
             self.log_error(time, &err);
             return;
         }
@@ -46,7 +53,8 @@ impl ResultSink for StdOutSink {
                 if rate > self.max_plausible_rate {
                     let err = format!(
                         "Exceeded max plausible rate: {} -> {} in {}s (rate: {:.3}/s, max: {:.3}/s)",
-                        self.last_value, number, delta_t, rate, self.max_plausible_rate);
+                        self.last_value, number, delta_t, rate, self.max_plausible_rate
+                    );
                     self.log_error(time, &err);
                     return;
                 }

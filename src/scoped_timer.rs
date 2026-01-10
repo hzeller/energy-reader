@@ -1,4 +1,3 @@
-
 use std::time::Instant;
 
 pub struct ScopedTimer {
@@ -8,7 +7,7 @@ pub struct ScopedTimer {
 
 impl ScopedTimer {
     pub fn new(title: &'static str) -> ScopedTimer {
-        ScopedTimer{
+        ScopedTimer {
             title,
             start: Instant::now(),
         }

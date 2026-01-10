@@ -51,12 +51,17 @@ pub fn debug_print_digits(
 
         // Highlight starting from the minimum score this particular digit
         // was ever selected at.
-        let highlight_score = digit_positions.iter()
-            .filter_map(|p| if p.digit_template as usize == i {
-                Some(p.score)
-            } else {
-                None
-            }).min_by(|a, b| a.total_cmp(b)).unwrap_or(1.0);
+        let highlight_score = digit_positions
+            .iter()
+            .filter_map(|p| {
+                if p.digit_template as usize == i {
+                    Some(p.score)
+                } else {
+                    None
+                }
+            })
+            .min_by(|a, b| a.total_cmp(b))
+            .unwrap_or(1.0);
 
         let visualize = graph(&digit_scores[i], highlight_score, sparkline_height);
         image::imageops::overlay(
@@ -77,8 +82,10 @@ pub fn debug_print_digits(
             (max_digit_width + loc.pos) as i64,
             vertical_pos as i64,
         );
-        eprintln!("{} {:5} {:.3}", digit_filename[loc.digit_template as usize],
-                  loc.pos, loc.score);
+        eprintln!(
+            "{} {:5} {:.3}",
+            digit_filename[loc.digit_template as usize], loc.pos, loc.score
+        );
     }
 
     output

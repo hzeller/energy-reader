@@ -1,5 +1,5 @@
-use rustfft::{FftPlanner, num_complex::Complex, FftDirection};
 use image::GrayImage;
+use rustfft::{FftDirection, FftPlanner, num_complex::Complex};
 
 use crate::ScopedTimer;
 
@@ -12,8 +12,13 @@ struct ImageFFT {
 }
 
 impl ImageFFT {
-    fn new(image: &GrayImage, average: f32, padded_w: usize,
-           padded_h: usize, planner: &mut FftPlanner<f32>) -> Self {
+    fn new(
+        image: &GrayImage,
+        average: f32,
+        padded_w: usize,
+        padded_h: usize,
+        planner: &mut FftPlanner<f32>,
+    ) -> Self {
         let mut fft = vec![Complex::default(); padded_w * padded_h];
         for (y, row) in image.rows().enumerate() {
             let offset = y * padded_w;
@@ -42,15 +47,15 @@ pub struct CrossCorrelator {
 
     needles: Vec<PreparedNeedle>,
 
-    planner: FftPlanner<f32>,  // Caches decisions
+    planner: FftPlanner<f32>, // Caches decisions
 }
 
 // Use FFT and the integral image to produce a normalized cross correlation.
 impl CrossCorrelator {
     /// Create a new cross correlator for given size (haystack+needle dimensions)
-    pub fn new(fft_width: u32, fft_height: u32)-> CrossCorrelator {
+    pub fn new(fft_width: u32, fft_height: u32) -> CrossCorrelator {
         let planner = FftPlanner::new();
-         Self {
+        Self {
             padded_width: fft_width as usize,
             padded_height: fft_height as usize,
             needles: Vec::new(),
@@ -75,8 +80,13 @@ impl CrossCorrelator {
         let std_dev = n_sq_diff_sum.sqrt();
 
         self.needles.push(PreparedNeedle {
-            fft: ImageFFT::new(needle, n_avg, self.padded_width,
-                               self.padded_height, &mut self.planner),
+            fft: ImageFFT::new(
+                needle,
+                n_avg,
+                self.padded_width,
+                self.padded_height,
+                &mut self.planner,
+            ),
             pixel_count,
             std_dev,
         })
@@ -84,11 +94,14 @@ impl CrossCorrelator {
 
     /// Given a haystack, run cross correlation with all added needles,
     /// and emit a feature score for each.
-    pub fn calculate_needle_scores_for(&mut self, haystack: &GrayImage)
-                                       -> Vec<ColumnFeatureScore> {
-        let haystack_fft = ImageFFT::new(haystack, 0.0,
-                                         self.padded_width, self.padded_height,
-                                         &mut self.planner);
+    pub fn calculate_needle_scores_for(&mut self, haystack: &GrayImage) -> Vec<ColumnFeatureScore> {
+        let haystack_fft = ImageFFT::new(
+            haystack,
+            0.0,
+            self.padded_width,
+            self.padded_height,
+            &mut self.planner,
+        );
         let haystack_integral = IntegralImages::new(haystack);
         let (w, h) = (self.padded_width, self.padded_height);
 
@@ -96,13 +109,20 @@ impl CrossCorrelator {
         let mut workspace = vec![Complex::default(); w * h];
 
         for needle in &self.needles {
-            workspace.iter_mut()
+            workspace
+                .iter_mut()
                 .zip(&haystack_fft.freq_domain)
                 .zip(&needle.fft.freq_domain)
                 .for_each(|((out, h_val), n_val)| {
                     *out = h_val * n_val.conj();
                 });
-            fft_2d(&mut workspace, w, h, &mut self.planner, FftDirection::Inverse);
+            fft_2d(
+                &mut workspace,
+                w,
+                h,
+                &mut self.planner,
+                FftDirection::Inverse,
+            );
 
             let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
             let fft_norm = (w * h) as f32;
@@ -120,7 +140,11 @@ impl CrossCorrelator {
                             let h_var = (sum_sq - (sum * sum) / needle.pixel_count).max(0.0);
                             let denom = needle.std_dev * h_var.sqrt();
 
-                            if denom > 1e-6 { (numerator / denom).clamp(-1.0, 1.0) } else { 0.0 }
+                            if denom > 1e-6 {
+                                (numerator / denom).clamp(-1.0, 1.0)
+                            } else {
+                                0.0
+                            }
                         })
                         .fold(0.0f32, |max, score| max.max(score)) // find the max in this column.
                 })
@@ -186,14 +210,18 @@ impl IntegralImages {
     }
 }
 
-fn fft_2d(data: &mut [Complex<f32>], width: usize, height: usize,
-          planner: &mut FftPlanner<f32>, direction: FftDirection) {
+fn fft_2d(
+    data: &mut [Complex<f32>],
+    width: usize,
+    height: usize,
+    planner: &mut FftPlanner<f32>,
+    direction: FftDirection,
+) {
     let _timer = ScopedTimer::new("fft_2d()");
     let fft_row = planner.plan_fft(width, direction);
     let mut scratch = vec![Complex::default(); fft_row.get_inplace_scratch_len()];
-    data.chunks_exact_mut(width).for_each(
-        |row| fft_row.process_with_scratch(row, &mut scratch)
-    );
+    data.chunks_exact_mut(width)
+        .for_each(|row| fft_row.process_with_scratch(row, &mut scratch));
 
     let fft_col = planner.plan_fft(height, direction);
     scratch.resize(fft_col.get_inplace_scratch_len(), Complex::default());

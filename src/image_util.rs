@@ -1,9 +1,9 @@
 use crate::ScopedTimer;
 
-use std::str::FromStr;
+use anyhow::{Context, Result};
+use image::imageops::{crop, flip_horizontal, flip_vertical, rotate90, rotate180};
 use image::{GrayImage, Luma};
-use anyhow::{Result, Context};
-use image::imageops::{rotate90, rotate180, crop, flip_vertical, flip_horizontal};
+use std::str::FromStr;
 
 pub fn load_image_as_grayscale(path: &str) -> GrayImage {
     image::open(path)
@@ -14,11 +14,14 @@ pub fn load_image_as_grayscale(path: &str) -> GrayImage {
 // Classic edge detection.
 pub fn sobel(input: &GrayImage) -> GrayImage {
     let (width, height) = (input.width(), input.height());
-    if width < 3 || height < 3 { return input.clone(); }
+    if width < 3 || height < 3 {
+        return input.clone();
+    }
 
     let (out_w, out_h) = (width - 2, height - 2);
     let mut result = GrayImage::new(out_w, out_h);
 
+    #[rustfmt::skip]
     for y in 0..out_h {
         for x in 0..out_w {
             // direct relative indexing.
@@ -64,7 +67,10 @@ impl FromStr for ImageOp {
                 w: w.parse().context("Can't parse 3rd ('width') as integer")?,
                 h: h.parse().context("Can't parse 4th ('height') as integer")?,
             }),
-            _ => anyhow::bail!("Unknown operation format: {}; one of 'rotate90', 'rotate180', 'flip-x', flip-y', 'crop:<x>:<y>:<width>:<height>'", s),
+            _ => anyhow::bail!(
+                "Unknown operation format: {}; one of 'rotate90', 'rotate180', 'flip-x', flip-y', 'crop:<x>:<y>:<width>:<height>'",
+                s
+            ),
         }
     }
 }
@@ -79,7 +85,11 @@ pub fn apply_ops(image: &mut GrayImage, ops: &[ImageOp]) -> Result<()> {
             ImageOp::FlipVertical => *image = flip_vertical(image),
             ImageOp::Crop { x, y, w, h } => {
                 if x + w > image.width() || y + h > image.height() {
-                    anyhow::bail!("Crop dimensions out of bounds; image size is {}x{}", image.width(), image.height());
+                    anyhow::bail!(
+                        "Crop dimensions out of bounds; image size is {}x{}",
+                        image.width(),
+                        image.height()
+                    );
                 }
                 *image = crop(image, *x, *y, *w, *h).to_image();
             }
