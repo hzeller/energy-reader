@@ -102,7 +102,7 @@ impl CrossCorrelator {
             self.padded_height,
             &mut self.planner,
         );
-        let haystack_integral = IntegralImages::new(haystack);
+        let haystack_integral = IntegralImage::new(haystack);
         let (w, h) = (self.padded_width, self.padded_height);
 
         let mut results = Vec::with_capacity(self.needles.len());
@@ -124,44 +124,61 @@ impl CrossCorrelator {
                 FftDirection::Inverse,
             );
 
-            let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
-            let fft_norm = (w * h) as f32;
-
             let _timer = ScopedTimer::new("collect score");
-            let score = (0..(haystack_fft.width - needle.fft.width))
-                .map(|x| {
-                    let x = x as usize;
-                    // Find max score in this column
-                    (0..(haystack_fft.height - needle.fft.height) as usize)
-                        .map(|y| {
-                            let numerator = workspace[y * w + x].re / fft_norm;
-                            let (sum, sum_sq) = haystack_integral.get_window_stats(x, y, nw, nh);
-
-                            let h_var = (sum_sq - (sum * sum) / needle.pixel_count).max(0.0);
-                            let denom = needle.std_dev * h_var.sqrt();
-
-                            if denom > 1e-6 {
-                                (numerator / denom).clamp(-1.0, 1.0)
-                            } else {
-                                0.0
-                            }
-                        })
-                        .fold(0.0f32, |max, score| max.max(score)) // find the max in this column.
-                })
-                .collect();
-            results.push(score);
+            let x_range = (haystack_fft.width - needle.fft.width) as usize;
+            let y_range = (haystack_fft.height - needle.fft.height) as usize;
+            results.push(self.score_columns(
+                &workspace,
+                needle,
+                &haystack_integral,
+                x_range,
+                y_range,
+            ));
         }
         results
     }
+
+    // For each of the columns, extract the highest value
+    fn score_columns(
+        &self,
+        fft_result: &[Complex<f32>],
+        needle: &PreparedNeedle,
+        haystack_integral: &IntegralImage,
+        x_range: usize,
+        y_range: usize,
+    ) -> ColumnFeatureScore {
+        let (nw, nh) = (needle.fft.width as usize, needle.fft.height as usize);
+        let fft_norm = fft_result.len() as f32;
+        let w = self.padded_width;
+        let mut score = vec![0.0f32; x_range];
+        for y in 0..y_range {
+            for x in 0..x_range {
+                // Normalization for less lighting sensitivity.
+                let numerator = fft_result[y * w + x].re / fft_norm;
+                let (sum, sum_sq) = haystack_integral.get_window_stats(x, y, nw, nh);
+
+                let h_var = (sum_sq - (sum * sum) / needle.pixel_count).max(0.0);
+                let denom = needle.std_dev * h_var.sqrt();
+
+                let pixel_score = if denom > 1e-6 {
+                    (numerator / denom).clamp(-1.0, 1.0)
+                } else {
+                    0.0
+                };
+                score[x] = score[x].max(pixel_score);
+            }
+        }
+        score
+    }
 }
 
-struct IntegralImages {
+struct IntegralImage {
     sum: Vec<u64>,
     sum_sq: Vec<u64>,
     width: usize,
 }
 
-impl IntegralImages {
+impl IntegralImage {
     fn new(img: &GrayImage) -> Self {
         let (w, h) = (img.width() as usize, img.height() as usize);
         // We size it (w+1)x(h+1) to handle boundaries (zeros in the first row/col)
@@ -184,7 +201,7 @@ impl IntegralImages {
                 sum_sq[idx] = row_sum_sq + sum_sq[above_idx];
             }
         }
-        IntegralImages {
+        IntegralImage {
             sum,
             sum_sq,
             width: w + 1,
@@ -229,16 +246,16 @@ fn fft_2d(
     for x in 0..width {
         // slice through data and extract the column.
         let mut colpos = x;
-        for y in 0..height {
-            column[y] = data[colpos];
+        for col in column.iter_mut().take(height) {
+            *col = data[colpos];
             colpos += width;
         }
 
         fft_col.process_with_scratch(&mut column, &mut scratch);
 
         colpos = x;
-        for y in 0..height {
-            data[colpos] = column[y];
+        for col in column.iter().take(height) {
+            data[colpos] = *col;
             colpos += width;
         }
     }
