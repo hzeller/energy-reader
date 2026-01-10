@@ -21,7 +21,6 @@ pub fn sobel(input: &GrayImage) -> GrayImage {
     let (out_w, out_h) = (width - 2, height - 2);
     let mut result = GrayImage::new(out_w, out_h);
 
-    #[rustfmt::skip]
     for y in 0..out_h {
         for x in 0..out_w {
             // direct relative indexing.
