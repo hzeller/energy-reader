@@ -16,7 +16,7 @@ cargo build --release
 
 There is also `--features=debug_timing` if you want to explore where processing time goes (in particular interesting on slow devices such as a Raspberry Pi)
 
-## Run Synopsis
+## Synopsis
 
 ```
 Usage: utility-reader [OPTIONS] [DIGIT_IMAGES]...
@@ -84,9 +84,9 @@ digit-0.png          | digit-1.png          | digit-5.png | digit-6.png         
 ---------------------|----------------------|-------------|----------------------|----------------------|--------------
 ![](img/digit-0.png) | ![](img/digit-1.png) | ![](img/digit-5.png) | ![](img/digit-6.png) | ![](img/digit-7.png) | ![](img/digit-8.png)
 
-Note, depending on your current counter staate, you might need to do this
-multiple times until you have all digits collected (we're missing 2, 3, 4, 9
-in our example).
+Note, depending on your visible counter digits, you might need to do this
+multiple times until you have all digits seen and collected (we're
+missing 2, 3, 4, 9 in our example).
 
 The first digit that is found in the filename is considered the digit it
 represents, so it is important to have it as part of the filename, like in `digit-6.png`.
@@ -94,7 +94,9 @@ You can actually have multiple templates for the same digit in case a single tem
 is not enough; below in the debugging section you see examples
 with multiple templates.
 
-To test, we can run the program with `--filename` on the image and the `--debug-scoring` flag to check out the score
+To test, we can run the program with `--filename` on the image (which then
+reads the image from the file instead of the webcam) and the `--debug-scoring`
+flag to emit additional diagnostic output:
 
 ```
 utility-reader --filename img/example-cropped.png --debug-scoring=/tmp/score.png --emit-count=8 img/digit-*
@@ -109,7 +111,7 @@ img/digit-8.png  1120 0.993
 1768122840 17566068
 ```
 
-The `--debug-scoring` flags outputs the template images that match, the matching X-position in the image, and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
+The `--debug-scoring` flags outputs the template images that match, the matching X-position in the image, and their score. We also get a neat image with sparklines visualizing the score for each digit over the image (here `/tmp/score.png`):
 
 ```
 timg /tmp/score.png
@@ -139,8 +141,9 @@ templates extracted, we can run the program. The `--repeat-sec` option will keep
 utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 --emit-count=7 digits/digit*.png >> out.log 2>> error.log &
 ```
 
-It is a good idea to emit one digit less than the counter provides: the last digit often
-rolls over and is hard to detect, but we don't want to fail the entire reading then.
+It is a good idea to `--emit-count` one digit less than the counter provides:
+the last digit often rolls over and is thus hard to recognize, but we don't
+want to fail the entire reading then.
 The resolution without the last digit is typically sufficient anyway.
 
 ### Plausibilty checks
@@ -148,12 +151,16 @@ The resolution without the last digit is typically sufficient anyway.
 Before the utility reader emits a value, it also does some basic plausibility checks and does
 not emit a value if they fail.
 
-  * If the value goes backwards, this is failing plausibility. We assume an always increasing number.
-    This might indicate that we errornously recognized a lower-value digit in place of a correct one.
-  * There is a check for a plausible rate `--max-plausible-rate`, which tests if the value
-    does not increase more than that rate per second (if we have `--repeat-sec`).
-    Otherwise that might indicate that we errornously recognized a higher-digit value at a place.
-    So you might need to adapt `--max-plausible-rate` for the expected rate in your context.
+  * We assume an always increasing number. So if the value goes backwards, this
+    is failing plausibility.
+    This might indicate that we errornously recognized a lower-value digit in
+    place of a correct one.
+  * There is a check for a plausible rate `--max-plausible-rate`, which tests
+    if the value does not increase more than that rate per second (if we have
+    `--repeat-sec`). Otherwise that might indicate that we errornously
+    recognized a higher-value digit at a place.
+    So you might need to adapt `--max-plausible-rate` for the expected rate
+    in your context.
 
 ## Debugging
 
