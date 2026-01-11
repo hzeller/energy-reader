@@ -76,9 +76,9 @@ We now have an image that only contains the area we're interested in.
 
 ### Set up digits to recognize
 
-The text detection of the `utility-reader` does not use a generic OCR, but matches the images of digits, so we have to extract these first as templates.
+The text detection of the `utility-reader` does not use a generic OCR, but matches the resemblence with images of digits, so we have to extract these first as templates.
 
-Take an image editor and crop out the digits from the image we just gathered (possibly adjust the curves so that the dark background is popping), and write as separate files, with the filename containing the ASCII character for the digit, e.g.
+Take an image editor and crop out the digits from the image we just gathered (possibly adjust the curves so that the dark background is popping), and write as separate small files, with the filename containing the ASCII character for the digit, e.g.
 
 digit-0.png          | digit-1.png          | digit-5.png | digit-6.png          | digit-7.png          | digit-8.png
 ---------------------|----------------------|-------------|----------------------|----------------------|--------------
@@ -89,11 +89,10 @@ multiple times until you have all digits collected (we're missing 2, 3, 4, 9
 in our example).
 
 The first digit that is found in the filename is considered the digit it
-represents, so it is important to have it in the filename.
+represents, so it is important to have it as part of the filename, like in `digit-6.png`.
 You can actually have multiple templates for the same digit in case a single template
 is not enough; below in the debugging section you see examples
-with multiple templates (in particular the `1` matched two different shapes,
-but is interpreted as the same digit).
+with multiple templates.
 
 To test, we can run the program with `--filename` on the image and the `--debug-scoring` flag to check out the score
 
@@ -110,7 +109,7 @@ img/digit-8.png  1120 0.993
 1768122840 17566068
 ```
 
-The `--debug-scoring` flags outputs the template files that match, the X-position they match in the image, and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
+The `--debug-scoring` flags outputs the template images that match, the matching X-position in the image, and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
 
 ```
 timg /tmp/score.png
@@ -137,8 +136,24 @@ templates extracted, we can run the program. The `--repeat-sec` option will keep
 `stdout` to log, ready to be post-processed.
 
 ```
-utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 digits/digit*.png >> out.log 2>> error.log &
+utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 --emit-count=7 digits/digit*.png >> out.log 2>> error.log &
 ```
+
+It is a good idea to emit one digit less than the counter provides: the last digit often
+rolls over and is hard to detect, but we don't want to fail the entire reading then.
+The resolution without the last digit is typically sufficient anyway.
+
+### Plausibilty checks
+
+Before the utility reader emits a value, it also does some basic plausibility checks and does
+not emit a value if they fail.
+
+  * If the value goes backwards, this is failing plausibility. We assume an always increasing number.
+    This might indicate that we errornously recognized a lower-value digit in place of a correct one.
+  * There is a check for a plausible rate `--max-plausible-rate`, which tests if the value
+    does not increase more than that rate per second (if we have `--repeat-sec`).
+    Otherwise that might indicate that we errornously recognized a higher-digit value at a place.
+    So you might need to adapt `--max-plausible-rate` for the expected rate in your context.
 
 ## Debugging
 
@@ -164,10 +179,10 @@ The columns contain the digit, their positions on the x-axis and a score as
 well as the digit filename that matched.
 
 Note that in this example, we have multiple templates that represent the same digit. This
-is possible and sometimes even needed if different on different wheels are distorted
-or have other challenges. In this case name the digits the similar way as before, with the
-first digit showing up in the filename being the digit it represents; in the example here
-there are for instance two templates for the digit `1` in filenames
+is possible and sometimes even needed if digits on different wheels are distorted or are dirty.
+In this case name the digits the similar way as before, with the
+first digit showing up in the filename being the digit it represents and then adding
+a suffix; in the example here there are two templates for the digit `1` in filenames
 `digits/d1-0.png` and `digits/d1-1.png`.
 
 ```
@@ -184,7 +199,11 @@ digits/d3-0.png  1164 0.877
 ## Postprocessing
 
 When running with `--repeat-sec`, the utility reader will regularly read the
-values from the counter and write to stdout as timestamp and value.
+values from the counter and write to stdout as timestamp and value. That should
+be a good input for whatever further processing you'd like to do in your home
+automation. It is also a perfect input to just create a graph.
+
+### Graph
 
 You can use the awk-script [`plot.awk`](./plot.awk) to postprocess that data
 to adapt the decimal point and calculate some derivation to calculate the
