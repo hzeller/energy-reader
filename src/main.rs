@@ -99,7 +99,7 @@ struct CliArgs {
     /// Digit template images to match; the first digit found in the filename
     /// is the matched digit. Allows to have multiple templates for the same
     /// digit if needed (e.g. d1-0.png, d1-1.png).
-    digit_images: Vec<String>,
+    digit_images: Vec<PathBuf>,
 }
 
 /// Detection output: the digit template detected with associated infor.
@@ -186,16 +186,20 @@ fn verify_looks_plausible(locations: &[DigitPos], expect_count: usize) -> Result
 
 fn extract_number(
     locations: &[DigitPos],
-    digit_filenames: &[String],
+    digit_filenames: &[PathBuf],
     expect_count: usize,
 ) -> Result<u64> {
     verify_looks_plausible(locations, expect_count)?;
-    let get_first_digit_from = |f: &String| -> Result<u64> {
-        Ok(f.chars()
+    let get_first_digit_from = |f: &PathBuf| -> Result<u64> {
+        Ok(f.file_name()
+            .ok_or(anyhow!("invalid filename"))?
+            .to_string_lossy()
+            .chars()
             .find(|c| c.is_ascii_digit())
             .and_then(|c| c.to_digit(10))
             .ok_or_else(|| anyhow!("Filename {:?} must contain a digit", f))? as u64)
     };
+    // Go from left to right, assembling the decimal number
     locations.iter().take(expect_count).try_fold(0, |acc, loc| {
         let filename = &digit_filenames[loc.digit_template as usize];
         Ok(acc * 10 + get_first_digit_from(filename)?)
@@ -238,7 +242,7 @@ fn main() -> ExitCode {
 
     let mut digits = Vec::new();
     for digit_picture in &args.digit_images {
-        let digit = load_image_as_grayscale(digit_picture.as_str());
+        let digit = load_image_as_grayscale(digit_picture);
         let digit = if args.edge_process {
             sobel(&digit)
         } else {

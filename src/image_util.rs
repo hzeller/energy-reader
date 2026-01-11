@@ -3,9 +3,10 @@ use crate::ScopedTimer;
 use anyhow::{Context, Result};
 use image::imageops::{crop, flip_horizontal, flip_vertical, rotate90, rotate180};
 use image::{GrayImage, Luma};
+use std::path::PathBuf;
 use std::str::FromStr;
 
-pub fn load_image_as_grayscale(path: &str) -> GrayImage {
+pub fn load_image_as_grayscale(path: &PathBuf) -> GrayImage {
     image::open(path)
         .expect("Failed to open image")
         .into_luma8()
@@ -26,12 +27,12 @@ pub fn sobel(input: &GrayImage) -> GrayImage {
             // direct relative indexing.
             let p = |dx: u32, dy: u32| input[(x + dx, y + dy)][0] as i32;
 
-            let (nw,   north,   ne) = (p(0, 0), p(1, 0), p(2, 0));
-            let (west,        east) = (p(0, 1), p(2, 1));
-            let (sw,   south,   se) = (p(0, 2), p(1, 2), p(2, 2));
+            let (nw, north, ne) = (p(0, 0), p(1, 0), p(2, 0));
+            let (west, east) = (p(0, 1), p(2, 1));
+            let (sw, south, se) = (p(0, 2), p(1, 2), p(2, 2));
 
             // Sobel kernel in x and y direction
-            let gx = (ne - nw) + 2 * (east - west)   + (se - sw);
+            let gx = (ne - nw) + 2 * (east - west) + (se - sw);
             let gy = (sw - nw) + 2 * (south - north) + (se - ne);
 
             let mag = ((gx * gx + gy * gy) as f32).sqrt().min(255.0);

@@ -33,7 +33,7 @@ impl ImageSource for FilenameSource {
         let timestamp = std::fs::metadata(&self.filename)?.created()?;
         let result = TimestampedImage {
             timestamp,
-            image: load_image_as_grayscale(&self.filename.to_string_lossy()),
+            image: load_image_as_grayscale(&self.filename),
         };
         Ok(result)
     }

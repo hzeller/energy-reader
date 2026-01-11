@@ -1,5 +1,6 @@
 use crate::DigitPos;
 use image::{GrayImage, Luma};
+use std::path::PathBuf;
 
 // Create a sparkline image of given height.
 fn graph(values: &[f32], highlight: f32, height: u32) -> GrayImage {
@@ -27,7 +28,7 @@ pub fn debug_print_digits(
     max_digit_height: u32,
     digit_scores: &[Vec<f32>],
     digit_positions: &[DigitPos],
-    digit_filename: &[String],
+    digit_filename: &[PathBuf],
 ) -> GrayImage {
     let sparkline_height = (1.5 * max_digit_height as f32) as u32;
 
@@ -84,7 +85,9 @@ pub fn debug_print_digits(
         );
         eprintln!(
             "{} {:5} {:.3}",
-            digit_filename[loc.digit_template as usize], loc.pos, loc.score
+            digit_filename[loc.digit_template as usize].display(),
+            loc.pos,
+            loc.score
         );
     }
 
