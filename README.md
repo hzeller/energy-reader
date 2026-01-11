@@ -14,7 +14,9 @@ This is meant to read the typical mechanical counters found in utility meters.
 cargo build --release
 ```
 
-## Run
+There is also `--features=debug_timing` if you want to explore where processing time goes (in particular interesting on slow devices such as a Raspberry Pi)
+
+## Run Synopsis
 
 ```
 Usage: utility-reader [OPTIONS] [DIGIT_IMAGES]...
@@ -38,21 +40,83 @@ Options:
   -V, --version                         Print version
 ```
 
-The digit-images need to be extracted from images of counters before, i.e. single digits the same size as they appear in the counter, e.g. looking like:
+## Setup
 
-![](img/digit-3.png)
+### Prepare image capture
+Note, if you run this on a Raspberry Pi, the Raspberry Pi cameras won't work as they don't show up as Video4Linux devices, so just use a cheap USB web-cam (they are typically < $10, so even cheaper than pi cameras).
+
+First, we have to prepare what is captured. Set up the camera and snap the first picture. We use the `--debug-capture` flag to
+emit the image. To make things a bit more complicated, let's assume the only way you could use the camera was upside down:
+
+```
+utility-reader --webcam --debug-capture=/tmp/initial.png
+```
+Don't worry about the error output about not detecting any digits, we're not there yet.
+
+Then check out the image (e.g. `timg` `/tmp/initial.png`)
+
+Original webcam               | --op rotate180                 | --op crop
+------------------------------|--------------------------------|--------
+![](img/example-initial.png)  | ![](img/example-processed.png) | ![](img/example-cropped.png)
+
+
+It is upside down and contains a lot of stuff that we don't need for digit recongition. Let's first put this image upside down. For that, we can use the `--op` image processing options and emit the resulting picture to `--debug-post-ops`
+
+```
+utility-reader --webcam --op rotate180 --debug-post-ops=/tmp/processed.pn
+```
+
+Nice, now we only need to crop out the area we are actually interested in. The `--op` flags are processed in sequence, so we now can add a crop operation on top
+
+```
+utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 --debug-post-ops=/tmp/processed.png
+```
+
+We now have an image that only contains the area we're interested in.
+
+### Set up digits to recognize
+
+The text detection of the `utility-reader` does not use a generic OCR, but matches the images of digits, so we have to prepare these.
+
+Take an image editor and crop out the digits, and write as separate files, with the filename containing the ascii character for
+the digit, e.g.
+
+digit-0.png          | digit-1.png          | digit-5.png | digit-6.png          | digit-7.png          | digit-8.png
+---------------------|----------------------|-------------|----------------------|----------------------|--------------
+![](img/digit-0.png) | ![](img/digit-1.png) | ![](img/digit-5.png) | ![](img/digit-6.png) | ![](img/digit-7.png) | ![](img/digit-8.png)
+
+Note, depending on your current counter staate, you might need to do this
+multiple times until you have all digits collected.
 
 The first digit that is found in the filename is considered the digit it
-represents. You can have multiple templates for the same digit in case a
-single template is not enough; below in the debugging section you see examples
+represents, so it is important to have it in the filename.
+You can actually have multiple templates for the same digit in case a single template
+is not enough; below in the debugging section you see examples
 with multiple templates (in particular the `1` matched two different shapes,
 but is interpreted as the same digit).
 
-Then running the program with `--filename` on the image:
+To test, we can run the program with `--filename` on the image and the `--debug-scoring` flag to check out the score
 
-![](img/example-counter.png)
+```
+utility-reader --filename img/example-cropped.png --debug-scoring=/tmp/score.png --emit-count=8 img/digit-*
+img/digit-1.png    45 0.969
+img/digit-7.png   185 0.994
+img/digit-5.png   346 0.998
+img/digit-6.png   500 0.939
+img/digit-6.png   650 0.968
+img/digit-0.png   805 0.981
+img/digit-6.png   955 0.915
+img/digit-8.png  1120 0.993
+1768122840 17566068
+```
 
-will output the sequence of digits observed including timestamp here `17300734`, so it can be used directly in scripts for further processing.
+We see the digits that matched and their score (this is emitted by the debug-scoring flag);
+this flag also outputs a neat image with sparklines for the match score of each digit
+
+```
+timg /tmp/score.png
+```
+![](img/example-score.png)
 
 If there is a plausibility check failing (uneven physical distance of digits
 or not exepected number of digits), then there is an error message on stderr and
@@ -60,22 +124,15 @@ exit code is non-zero (while stdout still outputs whatever digits it could
 read). Number of digits that is to be checked and emitted can be controlled with
 the `--emit-count`.
 
-If instead of `--filename`, the `--webcam` option is used, the image is fetched
-from the webcam.
+### Ready to operate
 
-Since the image from the webcam probably needs some massaging to just extract
-the area with the counter, there are image operations that can be applied
-before sent to the digit detection.
-For instance the following flags `--op rotate180 --op crop:10:30:1270:200`
-will first rotate the image from the webcam by 180 degrees, then crop from
-(x,y) = (10, 30) and the given width and height of 1280, 200.
+Now we have the needed image processing prepared, all the digits to be detecgted so now
+we can run the program. The `--repeat-sec` option will keep the program running and re-capturing new
+images, and output the results to a log, ready to be post-processed.
 
-Use `--debug-post-ops` to determine if the resulting image is as expected
-(Since you're on a shell, you probaly want to use [timg](https://timg.sh) as
-image viewer).
-
-The `--repeat-sec` option will keep the program running and re-capturing new
-images, the typical application when monitoring with a webcam.
+```
+utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 digits/digit*.png >> out.log 2>> error.log &
+```
 
 ## Debugging
 
@@ -91,14 +148,21 @@ first time
 
 With the `--debug-scoring` option, an image file is generated to illustrate how
 well each digit scores on each column of the meter image.
-It shows the edge-preprocessed original image, a spark-line of 'matching score'
-for each digit and as final row with the assembled images of the match digits.
+It shows the original image, a spark-line of 'matching score' for each digit and
+as final row the assembled images of the matching digits.
 
 ![](img/example-output.png)
 
 It also outputs a list (to stderr) with one line per matching digit.
 The columns contain the digit, their positions on the x-axis and a score as
 well as the digit filename that matched.
+
+Note that in this example, we have multiple templates that represent the same digit. This
+is possible and sometimes even needed if different on different wheels are distorted
+or have other challenges. In this case name the digits the similar way as before, with the
+first digit showing up in the filename being the digit it represents; in the example here
+there are for instance two templates for the digit `1` in filenames
+`digits/d1-0.png` and `digits/d1-1.png`.
 
 ```
 digits/d1-1.png    69 0.960
@@ -134,3 +198,6 @@ The following example also shows that it is good to have some light-source for
 the camera to see at night :)
 
 ![](img/sample-graph.png)
+
+
+[timg]: https://timg.sh
