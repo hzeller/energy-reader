@@ -43,15 +43,15 @@ Options:
 ## Setup
 
 ### Prepare image capture
-Note, if you run this on a Raspberry Pi, the Raspberry Pi cameras won't work as they don't show up as Video4Linux devices, so just use a cheap USB web-cam (they are typically < $10, so even cheaper than pi cameras).
+Note, if you run this on a Raspberry Pi, the Raspberry Pi cameras won't work as they don't show up as Video4Linux devices, so just use a cheap USB web-cam (they are typically < $10, so even cheaper than Pi cameras).
 
 First, we have to prepare what is captured. Set up the camera and snap the first picture. We use the `--debug-capture` flag to
-emit the image. To make things a bit more complicated, let's assume the only way you could use the camera was upside down:
+emit the image. To make things a bit more interesting, let's assume the only way you could use the camera was upside down:
 
 ```
 utility-reader --webcam --debug-capture=/tmp/initial.png
 ```
-Don't worry about the error output about not detecting any digits, we're not there yet.
+(Don't worry about the error output about not detecting any digits, we're not there yet.)
 
 Then check out the image (e.g. `timg` `/tmp/initial.png`)
 
@@ -60,13 +60,13 @@ Original webcam               | --op rotate180                 | --op crop
 ![](img/example-initial.png)  | ![](img/example-processed.png) | ![](img/example-cropped.png)
 
 
-It is upside down and contains a lot of stuff that we don't need for digit recongition. Let's first put this image upside down. For that, we can use the `--op` image processing options and emit the resulting picture to `--debug-post-ops`
+It is upside down and contains a lot of stuff that we don't need for digit recongition. Let's first make this image facing up. For that, we can use the `--op` image processing options and emit the resulting picture to `--debug-post-ops`
 
 ```
 utility-reader --webcam --op rotate180 --debug-post-ops=/tmp/processed.pn
 ```
 
-Nice, now we only need to crop out the area we are actually interested in. The `--op` flags are processed in sequence, so we now can add a crop operation on top
+Nice, now we only need to crop out the area we are actually interested in. The `--op` flags are processed in sequence, so we now can stack a crop operation on top
 
 ```
 utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 --debug-post-ops=/tmp/processed.png
@@ -76,17 +76,17 @@ We now have an image that only contains the area we're interested in.
 
 ### Set up digits to recognize
 
-The text detection of the `utility-reader` does not use a generic OCR, but matches the images of digits, so we have to prepare these.
+The text detection of the `utility-reader` does not use a generic OCR, but matches the images of digits, so we have to extract these first as templates.
 
-Take an image editor and crop out the digits, and write as separate files, with the filename containing the ascii character for
-the digit, e.g.
+Take an image editor and crop out the digits (possibly adjust the curves so that the dark background is popping), and write as separate files, with the filename containing the ASCII character for the digit, e.g.
 
 digit-0.png          | digit-1.png          | digit-5.png | digit-6.png          | digit-7.png          | digit-8.png
 ---------------------|----------------------|-------------|----------------------|----------------------|--------------
 ![](img/digit-0.png) | ![](img/digit-1.png) | ![](img/digit-5.png) | ![](img/digit-6.png) | ![](img/digit-7.png) | ![](img/digit-8.png)
 
 Note, depending on your current counter staate, you might need to do this
-multiple times until you have all digits collected.
+multiple times until you have all digits collected (we're missing 2, 3, 4, 9
+in our example).
 
 The first digit that is found in the filename is considered the digit it
 represents, so it is important to have it in the filename.
@@ -110,13 +110,19 @@ img/digit-8.png  1120 0.993
 1768122840 17566068
 ```
 
-We see the digits that matched and their score (this is emitted by the debug-scoring flag);
-this flag also outputs a neat image with sparklines for the match score of each digit
+The `--debug-scoring` flags outputs the template files that match, the X-position they match in the image and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
 
 ```
 timg /tmp/score.png
 ```
 ![](img/example-score.png)
+
+You also see the relevant line we're interested in: the timestamp and the
+recognized counter:
+
+```
+1768122840 17566068
+```
 
 If there is a plausibility check failing (uneven physical distance of digits
 or not exepected number of digits), then there is an error message on stderr and
@@ -126,9 +132,9 @@ the `--emit-count`.
 
 ### Ready to operate
 
-Now we have the needed image processing prepared, all the digits to be detecgted so now
-we can run the program. The `--repeat-sec` option will keep the program running and re-capturing new
-images, and output the results to a log, ready to be post-processed.
+Now that we have the needed image processing operations prepared, all the digit
+templates extracted, we can run the program. The `--repeat-sec` option will keep the program running and re-capturing new images, and output the results to
+`stdout` to log, ready to be post-processed.
 
 ```
 utility-reader --webcam --op rotate180 --op crop:40:60:1200:180 digits/digit*.png >> out.log 2>> error.log &
