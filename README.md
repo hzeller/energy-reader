@@ -146,7 +146,7 @@ the last digit often rolls over and is thus hard to recognize, but we don't
 want to fail the entire reading then.
 The resolution without the last digit is typically sufficient anyway.
 
-### Plausibilty checks
+### Plausibility checks
 
 Before the utility reader emits a value, it also does some basic plausibility checks and does
 not emit a value if they fail.
