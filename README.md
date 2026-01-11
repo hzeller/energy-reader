@@ -53,7 +53,7 @@ utility-reader --webcam --debug-capture=/tmp/initial.png
 ```
 (Don't worry about the error output about not detecting any digits, we're not there yet.)
 
-Then check out the image (e.g. `timg` `/tmp/initial.png`)
+Then check out the image (e.g. [timg] `/tmp/initial.png`)
 
 Original webcam               | --op rotate180                 | --op crop
 ------------------------------|--------------------------------|--------
@@ -63,7 +63,7 @@ Original webcam               | --op rotate180                 | --op crop
 It is upside down and contains a lot of stuff that we don't need for digit recongition. Let's first make this image facing up. For that, we can use the `--op` image processing options and emit the resulting picture to `--debug-post-ops`
 
 ```
-utility-reader --webcam --op rotate180 --debug-post-ops=/tmp/processed.pn
+utility-reader --webcam --op rotate180 --debug-post-ops=/tmp/processed.png
 ```
 
 Nice, now we only need to crop out the area we are actually interested in. The `--op` flags are processed in sequence, so we now can stack a crop operation on top
@@ -78,7 +78,7 @@ We now have an image that only contains the area we're interested in.
 
 The text detection of the `utility-reader` does not use a generic OCR, but matches the images of digits, so we have to extract these first as templates.
 
-Take an image editor and crop out the digits (possibly adjust the curves so that the dark background is popping), and write as separate files, with the filename containing the ASCII character for the digit, e.g.
+Take an image editor and crop out the digits from the image we just gathered (possibly adjust the curves so that the dark background is popping), and write as separate files, with the filename containing the ASCII character for the digit, e.g.
 
 digit-0.png          | digit-1.png          | digit-5.png | digit-6.png          | digit-7.png          | digit-8.png
 ---------------------|----------------------|-------------|----------------------|----------------------|--------------
@@ -110,7 +110,7 @@ img/digit-8.png  1120 0.993
 1768122840 17566068
 ```
 
-The `--debug-scoring` flags outputs the template files that match, the X-position they match in the image and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
+The `--debug-scoring` flags outputs the template files that match, the X-position they match in the image, and their score. We also get a neat image with sparklines for the match score of each digit (here `/tmp/score.png`):
 
 ```
 timg /tmp/score.png
@@ -183,8 +183,8 @@ digits/d3-0.png  1164 0.877
 
 ## Postprocessing
 
-When running with `--repeat-sec`, the energy reader will regularly read the
-values from the counter and write to stdout; timestamp and value.
+When running with `--repeat-sec`, the utility reader will regularly read the
+values from the counter and write to stdout as timestamp and value.
 
 You can use the awk-script [`plot.awk`](./plot.awk) to postprocess that data
 to adapt the decimal point and calculate some derivation to calculate the
@@ -198,10 +198,12 @@ script [`plot.gp`](./plot.gp) to generate a graph.
 
 The gnuplot script will directly draw the graph on the terminal (should be
 sufficiently modern terminal, such as `konsole`, but most can do graphics these
-days); alternatively you can modify the script to output to a PNG.
+days); alternatively you can modify the script to output to a PNG. By default
+you see blue points for the increasing gas counter and a green line with
+the average energy used, already calculated in kW (the derivation, essentially).
 
 The following example also shows that it is good to have some light-source for
-the camera to see at night :)
+the camera to see at night, as the sample from the night are missing :)
 
 ![](img/sample-graph.png)
 
