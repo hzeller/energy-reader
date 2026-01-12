@@ -6,7 +6,7 @@ data_file="/tmp/data.log"  # data preprocessed from plot.awk
 graph_width=2000
 graph_height=600
 
-moving_avg_N = 6           # for Kilowatt. 1 => no averaging
+moving_avg_N = 3           # for Kilowatt. 1 => no averaging
 timezone_diff_to_GMT = +1  # To correctly print the timestamp
 
 # Figure out input range, needed for day cutoff background boxes
