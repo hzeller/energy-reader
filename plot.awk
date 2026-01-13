@@ -7,6 +7,7 @@ BEGIN {
 }
 
 {
+    if ($1 <= 0 || $2 <= 0) next;  # skip bogus lines
     if (last_time > 0) {
         delta_t_h = ($1 - last_time) / 3600.0;
         delta_gas_m3 = ($2 - last_gas) / 100.0;

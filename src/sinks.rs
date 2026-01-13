@@ -1,38 +1,43 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Result of the detection logic.
+/// Result receiver of the detection logic.
 pub trait ResultSink {
     fn log_value(&mut self, time: SystemTime, number: u64);
     fn log_error(&mut self, time: SystemTime, err: &str);
 }
 
-pub struct StdOutSink {
+fn convert_ts(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// A sink that only accepts values that look plausible: always increasing
+/// and not exceeding a increase rate.
+pub struct PlausibilityFilterSink {
     last_value: u64,
     last_timestamp: u64,
     max_plausible_rate: f32, // value / sec
+    delegatee: Box<dyn ResultSink>,
 }
 
-impl StdOutSink {
+impl PlausibilityFilterSink {
     /// Create new stdout sink, that only emits values that are ever increasing,
     /// and also don't increase by more than max_plausible_rate (value/sec)
-    pub fn new(max_plausible_rate: f32) -> Self {
-        StdOutSink {
+    pub fn new(max_plausible_rate: f32, delegatee: Box<dyn ResultSink>) -> Self {
+        PlausibilityFilterSink {
             last_value: 0,
             last_timestamp: 0,
             max_plausible_rate,
+            delegatee,
         }
-    }
-
-    fn convert_ts(time: SystemTime) -> u64 {
-        time.duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
     }
 }
 
-impl ResultSink for StdOutSink {
+impl ResultSink for PlausibilityFilterSink {
     fn log_value(&mut self, time: SystemTime, number: u64) {
-        let ts = Self::convert_ts(time);
+        let ts = convert_ts(time);
+
         // Not going backwards ?
         if number < self.last_value {
             let err = format!(
@@ -61,14 +66,24 @@ impl ResultSink for StdOutSink {
             }
         }
 
-        println!("{} {}", ts, number);
+        self.delegatee.log_value(time, number);
         self.last_value = number;
         self.last_timestamp = ts;
     }
 
     fn log_error(&mut self, time: SystemTime, err: &str) {
-        eprintln!("{} ERROR: {}", Self::convert_ts(time), err);
+        self.delegatee.log_error(time, err);
     }
 }
 
+/// A ResultSink that outputs timestamp + value on stdout, errors to stderr.
+pub struct StdOutSink;
+impl ResultSink for StdOutSink {
+    fn log_value(&mut self, time: SystemTime, number: u64) {
+        println!("{} {}", convert_ts(time), number);
+    }
+    fn log_error(&mut self, time: SystemTime, err: &str) {
+        eprintln!("{} ERROR: {}", convert_ts(time), err);
+    }
+}
 // TODO: Prometheus sink

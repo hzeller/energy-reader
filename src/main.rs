@@ -29,7 +29,7 @@ use sources::{FilenameSource, ImageSource, TimestampedImage, WebCamSource};
 
 // ... and the acquired values are sent to.
 mod sinks;
-use sinks::{ResultSink, StdOutSink};
+use sinks::{PlausibilityFilterSink, ResultSink, StdOutSink};
 
 // Minimum feature threshold to consider robust digit detection.
 const THRESHOLD: f32 = 0.6;
@@ -238,7 +238,9 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let mut logger = StdOutSink::new(args.max_plausible_rate);
+    let output = Box::new(StdOutSink{});
+    let mut logger = PlausibilityFilterSink::new(args.max_plausible_rate,
+                                                 output);
 
     let mut digits = Vec::new();
     for digit_picture in &args.digit_images {
